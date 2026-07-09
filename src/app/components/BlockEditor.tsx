@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
 import type { BlockTipo, DayBlock } from '@/lib/types';
 import { hmToMinutes } from '@/lib/time';
-import { BLOCK_META } from '@/lib/defaults';
+import { BLOCK_META, WEEKDAYS } from '@/lib/defaults';
 
 const TIPOS: BlockTipo[] = ['fija', 'protegido', 'dudas', 'flex', 'comida', 'neutral'];
 
@@ -118,6 +118,29 @@ export function BlockEditor({ initial }: { initial: DayBlock[] }) {
                 </button>
               ))}
             </div>
+
+            {/* Días de la semana (vacío = todos) */}
+            <div className="mt-2 flex items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-wide text-slate-500">Días:</span>
+              {WEEKDAYS.map((d) => {
+                const on = (b.dias ?? []).includes(d.v);
+                return (
+                  <button
+                    key={d.v}
+                    onClick={() => {
+                      const next = on ? (b.dias ?? []).filter((x) => x !== d.v) : [...(b.dias ?? []), d.v];
+                      const dias = next.length ? next : null;
+                      patchLocal(b.id, { dias });
+                      save(b.id, { dias });
+                    }}
+                    className={`grid h-7 w-7 place-items-center rounded-full text-xs font-semibold ${on ? 'bg-brand text-white' : 'bg-ink-800 text-slate-500'}`}
+                  >
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-slate-600">{(b.dias?.length ?? 0) === 0 ? 'Todos los días' : 'Solo los días marcados'}</p>
 
             {savingId === b.id && <p className="mt-1 text-[10px] text-slate-600">Guardando…</p>}
           </div>

@@ -45,6 +45,22 @@ export const DEFAULT_PRIORIDADES: PrioridadSeed[] = [
 // Owners a los que se puede redirigir una duda (spec §3.2).
 export const OWNERS = ['Charbel', 'Felipe', 'Greg', 'Abraham'];
 
+// Días de la semana para el selector (orden L→D; valor = getDay() 0=dom).
+export const WEEKDAYS: { v: number; label: string }[] = [
+  { v: 1, label: 'L' },
+  { v: 2, label: 'M' },
+  { v: 3, label: 'M' },
+  { v: 4, label: 'J' },
+  { v: 5, label: 'V' },
+  { v: 6, label: 'S' },
+  { v: 0, label: 'D' },
+];
+
+// ¿El bloque aplica en este día de la semana? (dias null/vacío = todos).
+export function blockAppliesOn(dias: number[] | null | undefined, weekday: number): boolean {
+  return !dias || dias.length === 0 || dias.includes(weekday);
+}
+
 // Etiquetas y colores de tipo de bloque (UI).
 export const BLOCK_META: Record<BlockTipo, { label: string; color: string; dot: string }> = {
   fija: { label: 'Fija', color: 'bg-ink-800 border-ink-600', dot: 'bg-slate-400' },

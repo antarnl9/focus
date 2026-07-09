@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DayBlock, CalendarEvent } from '@/lib/types';
 import { minutesOfDay, hmToMinutes, prettyTime } from '@/lib/time';
 import { BLOCK_META } from '@/lib/defaults';
 import { EventSheet } from './EventSheet';
+import { BlockSheet } from './BlockSheet';
 
 interface Item {
   key: string;
@@ -17,11 +19,27 @@ interface Item {
   timeLabel: string;
   link?: string;
   event?: CalendarEvent;
+  block?: DayBlock;
 }
 
-export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; events: CalendarEvent[]; now: Date }) {
+export function DayTimeline({
+  blocks,
+  events,
+  now,
+  supabase,
+  onBlockSaved,
+  onBlockDeleted,
+}: {
+  blocks: DayBlock[];
+  events: CalendarEvent[];
+  now: Date;
+  supabase: SupabaseClient;
+  onBlockSaved: (b: DayBlock) => void;
+  onBlockDeleted: (id: string) => void;
+}) {
   const mins = minutesOfDay(now);
   const [selEvent, setSelEvent] = useState<CalendarEvent | null>(null);
+  const [selBlock, setSelBlock] = useState<DayBlock | null>(null);
 
   const items = useMemo<Item[]>(() => {
     const b: Item[] = blocks.map((bl) => ({
@@ -32,6 +50,7 @@ export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; event
       kind: 'block',
       tipo: bl.tipo,
       timeLabel: `${prettyTime(bl.hora_ini)} – ${prettyTime(bl.hora_fin)}`,
+      block: bl,
     }));
     const e: Item[] = events.map((ev) => {
       const start = minutesOfDay(new Date(ev.start));
@@ -71,17 +90,22 @@ export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; event
           return (
             <li key={it.key}>
               <div
-                onClick={it.kind === 'event' && it.event ? () => setSelEvent(it.event!) : undefined}
-                role={it.kind === 'event' ? 'button' : undefined}
+                onClick={
+                  it.kind === 'event' && it.event
+                    ? () => setSelEvent(it.event!)
+                    : it.kind === 'block' && it.block
+                    ? () => setSelBlock(it.block!)
+                    : undefined
+                }
+                role="button"
                 className={[
-                  'flex items-stretch gap-3 rounded-xl border px-3 py-2.5 transition',
+                  'flex items-stretch gap-3 rounded-xl border px-3 py-2.5 transition cursor-pointer active:scale-[0.99]',
                   isActive
                     ? 'border-brand bg-brand-deep/20 shadow-pop'
                     : it.kind === 'event'
                     ? 'border-ink-700 bg-ink-800/40'
                     : meta?.color ?? 'border-ink-700 bg-ink-800/60',
                   isPast && !isActive ? 'opacity-45' : '',
-                  it.kind === 'event' ? 'cursor-pointer active:scale-[0.99]' : '',
                 ].join(' ')}
               >
                 <div className="flex w-16 shrink-0 flex-col justify-center">
@@ -102,10 +126,9 @@ export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; event
                     {meta && it.tipo !== 'flex' && it.tipo !== 'neutral' && (
                       <span className={`chip ${chipTone(it.tipo!)}`}>{meta.label}</span>
                     )}
-                    {it.kind === 'event' && <span className="chip bg-ink-700 text-[10px] text-slate-400">toca para editar</span>}
                   </div>
                 </div>
-                {it.kind === 'event' && <span className="self-center text-slate-500">›</span>}
+                <span className="self-center text-slate-500">›</span>
               </div>
             </li>
           );
@@ -116,6 +139,15 @@ export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; event
       </ol>
 
       {selEvent && <EventSheet event={selEvent} onClose={() => setSelEvent(null)} />}
+      {selBlock && (
+        <BlockSheet
+          block={selBlock}
+          supabase={supabase}
+          onSaved={onBlockSaved}
+          onDeleted={onBlockDeleted}
+          onClose={() => setSelBlock(null)}
+        />
+      )}
     </section>
   );
 }

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
+import { localParts } from '@/lib/time';
+import { blockAppliesOn } from '@/lib/defaults';
 import type { DayBlock, Duda, Prioridad, BitacoraEntry, Grabacion, Daily, CalendarEvent } from '@/lib/types';
 import { HeaderNow } from './HeaderNow';
 import { DayTimeline } from './DayTimeline';
@@ -33,6 +35,14 @@ export function Dashboard(props: Props) {
 
   const [dudas, setDudas] = useState<Duda[]>(props.initialDudas);
   const [bitacora, setBitacora] = useState<BitacoraEntry[]>(props.initialBitacora);
+  const [blocks, setBlocks] = useState<DayBlock[]>(props.initialBlocks);
+
+  // Bloques que aplican HOY (según su día de la semana).
+  const weekday = localParts(now).weekday;
+  const todayBlocks = useMemo(() => blocks.filter((b) => blockAppliesOn(b.dias, weekday)), [blocks, weekday]);
+
+  const onBlockSaved = useCallback((b: DayBlock) => setBlocks((prev) => prev.map((x) => (x.id === b.id ? b : x))), []);
+  const onBlockDeleted = useCallback((id: string) => setBlocks((prev) => prev.filter((x) => x.id !== id)), []);
 
   // Reloj: actualiza "ahora" y el contador cada 20 s.
   useEffect(() => {
@@ -77,12 +87,19 @@ export function Dashboard(props: Props) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-ink-950">
-      <HeaderNow nombre={props.nombre} blocks={props.initialBlocks} now={now} pendientes={pendientes} urgentes={urgentes} />
+      <HeaderNow nombre={props.nombre} blocks={todayBlocks} now={now} pendientes={pendientes} urgentes={urgentes} />
 
       <main className="flex-1 overflow-y-auto px-4 pb-28 pt-3">
         {tab === 'hoy' && (
           <div className="space-y-6">
-            <DayTimeline blocks={props.initialBlocks} events={props.calendarEvents} now={now} />
+            <DayTimeline
+              blocks={todayBlocks}
+              events={props.calendarEvents}
+              now={now}
+              supabase={supabase}
+              onBlockSaved={onBlockSaved}
+              onBlockDeleted={onBlockDeleted}
+            />
             <Prioridades supabase={supabase} initial={props.initialPrioridades} onLog={refetchBitacora} />
             <QuickActions />
           </div>
@@ -94,7 +111,7 @@ export function Dashboard(props: Props) {
           <Bitacora supabase={supabase} today={props.today} entries={bitacora} onChanged={refetchBitacora} />
         )}
 
-        {tab === 'juntas' && <Recorder initial={props.initialGrabaciones} blocks={props.initialBlocks} now={now} />}
+        {tab === 'juntas' && <Recorder initial={props.initialGrabaciones} blocks={todayBlocks} now={now} />}
 
         {tab === 'daily' && <DailyPanel today={props.today} initial={props.initialDaily} />}
       </main>

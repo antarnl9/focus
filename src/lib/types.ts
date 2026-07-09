@@ -6,6 +6,7 @@ export interface DayBlock {
   id: string;
   user_id: string;
   dia_semana: number | null;
+  dias: number[] | null; // días de la semana (0=dom..6=sáb); null/vacío = todos
   hora_ini: string;
   hora_fin: string;
   label: string;
