@@ -105,3 +105,33 @@ export function localMidnightISO(dateStr: string): string {
   return `${dateStr}T00:00:00-06:00`;
 }
 
+/** Fin de día local en ISO con offset. */
+export function localEndOfDayISO(dateStr: string): string {
+  return `${dateStr}T23:59:59-06:00`;
+}
+
+/** Suma (o resta) días a una fecha 'YYYY-MM-DD' y devuelve 'YYYY-MM-DD'. */
+export function addDaysStr(dateStr: string, delta: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const base = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  base.setUTCDate(base.getUTCDate() + delta);
+  return `${base.getUTCFullYear()}-${pad(base.getUTCMonth() + 1)}-${pad(base.getUTCDate())}`;
+}
+
+/** Lista de fechas 'YYYY-MM-DD' entre dos fechas (inclusive). weekdaysOnly = solo L-V. */
+export function datesBetween(desde: string, hasta: string, weekdaysOnly = false): string[] {
+  const [y1, m1, d1] = desde.split('-').map(Number);
+  const [y2, m2, d2] = hasta.split('-').map(Number);
+  const start = Date.UTC(y1, m1 - 1, d1, 12, 0, 0);
+  const end = Date.UTC(y2, m2 - 1, d2, 12, 0, 0);
+  const out: string[] = [];
+  for (let t = start; t <= end; t += 86_400_000) {
+    const dt = new Date(t);
+    const dow = dt.getUTCDay();
+    if (weekdaysOnly && (dow === 0 || dow === 6)) continue;
+    out.push(`${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`);
+    if (out.length > 200) break; // seguridad
+  }
+  return out;
+}
+

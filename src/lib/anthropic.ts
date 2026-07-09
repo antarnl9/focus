@@ -119,8 +119,8 @@ export interface DailyInput {
   acuerdos: { junta: string; acuerdo: string; responsable?: string; fecha?: string }[];
 }
 
-export async function composeDaily(input: DailyInput): Promise<string> {
-  const system = `Eres el asistente del COO de T1. Redactas el "Daily" de cierre que se envía al CEO por Slack.
+export async function composeDaily(input: DailyInput, contexto = ''): Promise<string> {
+  const system = `${contexto ? contexto + '\n\n' : ''}Eres el asistente del COO de T1. Redactas el "Daily" de cierre que se envía al CEO por Slack.
 Usa EXACTAMENTE este formato (markdown de Slack, con emojis):
 
 ✅ *Resuelto hoy*
@@ -161,6 +161,64 @@ ACUERDOS DE JUNTAS:
 ${input.acuerdos.map((a) => `- (${a.junta}) ${a.acuerdo}${a.responsable ? ` — ${a.responsable}` : ''}${a.fecha ? ` (${a.fecha})` : ''}`).join('\n') || '(ninguno)'}`;
 
   return (await completeText(system, user, 1800)).trim();
+}
+
+// ---------------------------------------------------------------------------
+//  (g) Coach de alineación: ¿voy alineado a mis prioridades y objetivo?
+// ---------------------------------------------------------------------------
+export interface CoachInput {
+  contexto: string; // perfil/objetivo del COO
+  rango: string;
+  metricas: {
+    dudasCreadas: number;
+    dudasResueltas: number;
+    tiempoPromedioMin: number | null;
+    pctEnVentana: number | null;
+    cumplimientoProtegido: number | null;
+  };
+  prioridades: { tier: number; texto: string; done: boolean }[];
+  bitacora: { tipo: string; texto: string }[];
+  juntas: { label: string; veces: number }[];
+}
+
+export interface CoachResult {
+  veredicto: 'alineado' | 'parcial' | 'desviado';
+  resumen: string;
+  bien: string[];
+  ajusta: string[];
+  siguiente_paso: string;
+}
+
+export async function alignmentCoach(input: CoachInput): Promise<CoachResult> {
+  const system = `${input.contexto ? input.contexto + '\n\n' : ''}Eres el chief of staff del COO de T1. Evalúas qué tan alineado está su tiempo real con sus prioridades (P0/P1/P2) y su objetivo en la empresa.
+Analiza la actividad del periodo (dudas, prioridades, bitácora, juntas) y responde con honestidad y foco.
+
+Devuelve JSON:
+- "veredicto": "alineado" | "parcial" | "desviado"
+- "resumen": string (1-2 frases: qué tan alineado está y por qué)
+- "bien": string[] (2-3 cosas que sí empujan sus P0/objetivo)
+- "ajusta": string[] (2-3 cosas concretas a cambiar: tiempo mal invertido, P0 sin avanzar, juntas de bajo valor)
+- "siguiente_paso": string (la acción #1 para volver/seguir alineado)
+Sé específico y accionable. No inventes datos.`;
+
+  const user = `PERIODO: ${input.rango}
+
+MÉTRICAS:
+- Dudas creadas: ${input.metricas.dudasCreadas}, resueltas: ${input.metricas.dudasResueltas}
+- Tiempo promedio a resolución: ${input.metricas.tiempoPromedioMin ?? 'n/d'} min
+- % resueltas en ventana: ${input.metricas.pctEnVentana ?? 'n/d'}%
+- Cumplimiento de bloques protegidos: ${input.metricas.cumplimientoProtegido ?? 'n/d'}%
+
+PRIORIDADES:
+${input.prioridades.map((p) => `- P${p.tier} ${p.done ? '[hecho]' : '[pendiente]'} ${p.texto}`).join('\n') || '(ninguna)'}
+
+BITÁCORA DEL PERIODO:
+${input.bitacora.slice(0, 60).map((b) => `- (${b.tipo}) ${b.texto}`).join('\n') || '(sin entradas)'}
+
+JUNTAS GRABADAS:
+${input.juntas.map((j) => `- ${j.label} (${j.veces}x)`).join('\n') || '(ninguna)'}`;
+
+  return completeJSON<CoachResult>(system, user, 1500);
 }
 
 // ---------------------------------------------------------------------------

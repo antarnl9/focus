@@ -1,38 +1,34 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { weekStartStr, weekdaysStr, localMidnightISO, hmToMinutes, minutesOfDay } from './time';
-import { listWeekEvents } from './google';
+import { localMidnightISO, localEndOfDayISO, datesBetween, hmToMinutes, minutesOfDay } from './time';
+import { listEventsBetween } from './google';
 
-export interface WeeklyMetrics {
-  weekStart: string;
+export interface Metrics {
+  desde: string;
+  hasta: string;
   dudasCreadas: number;
   dudasResueltas: number;
   dudasRedirigidas: number;
   dudasPendientes: number;
-  tiempoPromedioMin: number | null; // minutos promedio a resolución
-  pctEnVentana: number | null; // % resueltas dentro de una ventana de dudas
+  tiempoPromedioMin: number | null;
+  pctEnVentana: number | null;
   resueltasEnVentana: number;
   resueltasInterrupcion: number;
   porOwner: { owner: string; count: number }[];
-  cumplimientoProtegido: number | null; // % de bloques protegidos sin evento externo encima
+  cumplimientoProtegido: number | null;
   bloquesProtegidos: number;
   bloquesInvadidos: number;
 }
 
-// Métricas de la semana (spec §9 Fase 4, punto 12).
-export async function computeWeeklyMetrics(client: SupabaseClient, userId: string): Promise<WeeklyMetrics> {
-  const weekStart = weekStartStr();
-  const since = localMidnightISO(weekStart);
+// Métricas por rango de fechas (spec §9 Fase 4, punto 12).
+export async function computeMetrics(client: SupabaseClient, userId: string, desde: string, hasta: string): Promise<Metrics> {
+  const since = localMidnightISO(desde);
+  const until = localEndOfDayISO(hasta);
 
   const [blocksR, creadasR, resueltasR, redirigidasR, pendientesR] = await Promise.all([
     client.from('day_blocks').select('hora_ini, hora_fin, tipo').eq('user_id', userId),
-    client.from('dudas').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', since),
-    client
-      .from('dudas')
-      .select('created_at, resolved_at')
-      .eq('user_id', userId)
-      .eq('estado', 'resuelta')
-      .gte('resolved_at', since),
-    client.from('dudas').select('redirigida_a').eq('user_id', userId).eq('estado', 'redirigida').gte('resolved_at', since),
+    client.from('dudas').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', since).lte('created_at', until),
+    client.from('dudas').select('created_at, resolved_at').eq('user_id', userId).eq('estado', 'resuelta').gte('resolved_at', since).lte('resolved_at', until),
+    client.from('dudas').select('redirigida_a').eq('user_id', userId).eq('estado', 'redirigida').gte('resolved_at', since).lte('resolved_at', until),
     client.from('dudas').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('estado', 'pendiente'),
   ]);
 
@@ -41,7 +37,6 @@ export async function computeWeeklyMetrics(client: SupabaseClient, userId: strin
     .filter((b) => b.tipo === 'dudas')
     .map((b) => ({ ini: hmToMinutes(b.hora_ini), fin: hmToMinutes(b.hora_fin) }));
 
-  // Tiempo a resolución + en-ventana vs interrupción.
   const resueltas = resueltasR.data ?? [];
   let sumaMin = 0;
   let enVentana = 0;
@@ -55,7 +50,6 @@ export async function computeWeeklyMetrics(client: SupabaseClient, userId: strin
   const tiempoPromedioMin = resueltas.length ? Math.round(sumaMin / resueltas.length) : null;
   const pctEnVentana = resueltas.length ? Math.round((enVentana / resueltas.length) * 100) : null;
 
-  // Redirigidas por owner.
   const ownerMap = new Map<string, number>();
   for (const r of redirigidasR.data ?? []) {
     const o = r.redirigida_a || 'Sin asignar';
@@ -63,26 +57,25 @@ export async function computeWeeklyMetrics(client: SupabaseClient, userId: strin
   }
   const porOwner = [...ownerMap.entries()].map(([owner, count]) => ({ owner, count })).sort((a, b) => b.count - a.count);
 
-  // Cumplimiento de bloques protegidos: sin evento de Calendar encima.
+  // Cumplimiento de bloques protegidos en el rango (solo L-V).
   let cumplimientoProtegido: number | null = null;
   let bloquesProtegidos = 0;
   let bloquesInvadidos = 0;
   const protegidos = blocks.filter((b) => b.tipo === 'protegido' || b.tipo === 'comida');
-  if (protegidos.length) {
+  const dias = datesBetween(desde, hasta, true);
+  if (protegidos.length && dias.length) {
     try {
-      const events = await listWeekEvents(userId); // eventos que no son de Focus
-      const dias = weekdaysStr();
+      const events = await listEventsBetween(userId, dias[0], dias[dias.length - 1]);
       for (const dia of dias) {
         for (const b of protegidos) {
           bloquesProtegidos++;
           const bIni = hmToMinutes(b.hora_ini);
           const bFin = hmToMinutes(b.hora_fin);
           const invadido = events.some((ev) => {
-            const evDay = ev.start.slice(0, 10);
-            if (evDay !== dia) return false;
+            if (ev.start.slice(0, 10) !== dia) return false;
             const s = minutesOfDay(new Date(ev.start));
             const e = minutesOfDay(new Date(ev.end));
-            return s < bFin && e > bIni; // solapamiento
+            return s < bFin && e > bIni;
           });
           if (invadido) bloquesInvadidos++;
         }
@@ -95,7 +88,8 @@ export async function computeWeeklyMetrics(client: SupabaseClient, userId: strin
   }
 
   return {
-    weekStart,
+    desde,
+    hasta,
     dudasCreadas: creadasR.count ?? 0,
     dudasResueltas: resueltas.length,
     dudasRedirigidas: (redirigidasR.data ?? []).length,

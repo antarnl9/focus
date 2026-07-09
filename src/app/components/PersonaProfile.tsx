@@ -3,7 +3,8 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
-import type { Persona, Grabacion, Duda } from '@/lib/types';
+import type { Persona, PersonaTipo, Grabacion, Duda } from '@/lib/types';
+import { TIPO_META, DOMAIN, normalizeCorreo } from './persona-util';
 
 export function PersonaProfile({
   persona,
@@ -23,10 +24,11 @@ export function PersonaProfile({
     correo: persona.correo ?? '',
     slack_user_id: persona.slack_user_id ?? '',
     descripcion: persona.descripcion ?? '',
+    tipo: persona.tipo,
   });
   const [busy, setBusy] = useState(false);
 
-  function set(k: keyof typeof form, v: string) {
+  function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
@@ -37,9 +39,10 @@ export function PersonaProfile({
       .update({
         nombre: form.nombre.trim(),
         puesto: form.puesto.trim() || null,
-        correo: form.correo.trim() || null,
+        correo: normalizeCorreo(form.correo, form.tipo),
         slack_user_id: form.slack_user_id.trim() || null,
         descripcion: form.descripcion.trim() || null,
+        tipo: form.tipo,
       })
       .eq('id', persona.id);
     setBusy(false);
@@ -64,7 +67,12 @@ export function PersonaProfile({
                 {persona.nombre.slice(0, 2).toUpperCase()}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-lg font-bold">{persona.nombre}</p>
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-lg font-bold">{persona.nombre}</p>
+                  <span className={`chip ${TIPO_META[persona.tipo]?.tone ?? 'bg-ink-700 text-slate-400'}`}>
+                    {TIPO_META[persona.tipo]?.icon} {TIPO_META[persona.tipo]?.label ?? persona.tipo}
+                  </span>
+                </div>
                 {persona.puesto && <p className="text-sm text-slate-400">{persona.puesto}</p>}
               </div>
               <button onClick={() => setEditing(true)} className="chip bg-ink-700 text-slate-300">
@@ -84,9 +92,24 @@ export function PersonaProfile({
           </>
         ) : (
           <div className="space-y-2">
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-slate-500">Tipo</label>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {(Object.keys(TIPO_META) as PersonaTipo[]).map((t) => (
+                  <button key={t} onClick={() => set('tipo', t)} className={`chip ${form.tipo === t ? TIPO_META[t].tone : 'bg-ink-800 text-slate-500'}`}>
+                    {TIPO_META[t].icon} {TIPO_META[t].label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <Field label="Nombre" value={form.nombre} onChange={(v) => set('nombre', v)} />
             <Field label="Puesto" value={form.puesto} onChange={(v) => set('puesto', v)} />
-            <Field label="Correo" value={form.correo} onChange={(v) => set('correo', v)} placeholder="correo@t1.com" />
+            <Field
+              label="Correo"
+              value={form.correo}
+              onChange={(v) => set('correo', v)}
+              placeholder={form.tipo === 'interno' ? `usuario (se completa @${DOMAIN})` : 'correo@dominio.com'}
+            />
             <Field label="Slack user ID" value={form.slack_user_id} onChange={(v) => set('slack_user_id', v)} placeholder="U0XXXXXXX" />
             <div>
               <label className="text-[10px] uppercase tracking-wide text-slate-500">Descripción / perfil</label>

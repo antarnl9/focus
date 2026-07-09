@@ -40,10 +40,10 @@ export function HeaderNow({
         </div>
         <div className="flex items-center gap-2">
           <Link
-            href="/semana"
+            href="/metricas"
             className="rounded-full border border-ink-700 px-3 py-1.5 text-xs text-slate-300 active:scale-95"
           >
-            Semana
+            Métricas
           </Link>
           <form action="/auth/signout" method="post">
             <button

@@ -3,7 +3,8 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
-import type { Persona } from '@/lib/types';
+import type { Persona, PersonaTipo } from '@/lib/types';
+import { TIPO_META, DOMAIN, normalizeCorreo } from './persona-util';
 
 export function PersonasDirectory({ initial }: { initial: Persona[] }) {
   const supabase = useRef(createSupabaseBrowser()).current;
@@ -12,6 +13,7 @@ export function PersonasDirectory({ initial }: { initial: Persona[] }) {
   const [nombre, setNombre] = useState('');
   const [puesto, setPuesto] = useState('');
   const [correo, setCorreo] = useState('');
+  const [tipo, setTipo] = useState<PersonaTipo>('interno');
   const [busy, setBusy] = useState(false);
 
   async function add() {
@@ -21,7 +23,7 @@ export function PersonasDirectory({ initial }: { initial: Persona[] }) {
     const uid = (await supabase.auth.getUser()).data.user?.id;
     const { data } = await supabase
       .from('personas')
-      .insert({ user_id: uid, nombre: n, puesto: puesto.trim() || null, correo: correo.trim() || null })
+      .insert({ user_id: uid, nombre: n, puesto: puesto.trim() || null, correo: normalizeCorreo(correo, tipo), tipo })
       .select()
       .single();
     setBusy(false);
@@ -29,6 +31,7 @@ export function PersonasDirectory({ initial }: { initial: Persona[] }) {
     setNombre('');
     setPuesto('');
     setCorreo('');
+    setTipo('interno');
     setAdding(false);
   }
 
@@ -43,13 +46,30 @@ export function PersonasDirectory({ initial }: { initial: Persona[] }) {
 
       {adding && (
         <div className="card space-y-2 p-3">
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.keys(TIPO_META) as PersonaTipo[]).map((t) => (
+              <button key={t} onClick={() => setTipo(t)} className={`chip ${tipo === t ? TIPO_META[t].tone : 'bg-ink-800 text-slate-500'}`}>
+                {TIPO_META[t].icon} {TIPO_META[t].label}
+              </button>
+            ))}
+          </div>
           <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre *" className="w-full rounded-lg bg-ink-900 px-3 py-2 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand" />
           <input value={puesto} onChange={(e) => setPuesto(e.target.value)} placeholder="Puesto" className="w-full rounded-lg bg-ink-900 px-3 py-2 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand" />
-          <input value={correo} onChange={(e) => setCorreo(e.target.value)} placeholder="Correo" className="w-full rounded-lg bg-ink-900 px-3 py-2 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand" />
+          <div className="flex items-center rounded-lg bg-ink-900 ring-1 ring-ink-700 focus-within:ring-brand">
+            <input
+              value={correo}
+              onChange={(e) => setCorreo(e.target.value)}
+              placeholder={tipo === 'interno' ? 'usuario' : 'correo@dominio.com'}
+              className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none"
+            />
+            {tipo === 'interno' && !correo.includes('@') && <span className="pr-3 text-sm text-slate-500">@{DOMAIN}</span>}
+          </div>
           <button onClick={add} disabled={busy || !nombre.trim()} className="btn-primary w-full text-sm">
             Guardar
           </button>
-          <p className="text-[11px] text-slate-600">Después, en su perfil, agregas correo, Slack y descripción.</p>
+          <p className="text-[11px] text-slate-600">
+            {tipo === 'interno' ? `Si es de T1, solo escribe el usuario; se completa @${DOMAIN}.` : 'Después agregas Slack y descripción en su perfil.'}
+          </p>
         </div>
       )}
 
@@ -60,7 +80,10 @@ export function PersonasDirectory({ initial }: { initial: Persona[] }) {
               {p.nombre.slice(0, 2).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{p.nombre}</p>
+              <div className="flex items-center gap-2">
+                <p className="truncate text-sm font-semibold">{p.nombre}</p>
+                <span className={`chip ${TIPO_META[p.tipo]?.tone ?? 'bg-ink-700 text-slate-400'}`}>{TIPO_META[p.tipo]?.label ?? p.tipo}</span>
+              </div>
               <p className="truncate text-xs text-slate-500">{[p.puesto, p.correo].filter(Boolean).join(' · ') || 'Sin datos'}</p>
             </div>
             <span className="text-slate-600">›</span>

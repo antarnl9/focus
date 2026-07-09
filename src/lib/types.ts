@@ -83,6 +83,8 @@ export interface Grabacion {
   created_at: string;
 }
 
+export type PersonaTipo = 'interno' | 'cliente' | 'proveedor' | 'otro';
+
 export interface Persona {
   id: string;
   user_id: string;
@@ -91,7 +93,15 @@ export interface Persona {
   correo: string | null;
   slack_user_id: string | null;
   descripcion: string | null;
+  tipo: PersonaTipo;
   created_at: string;
+}
+
+export interface CooProfile {
+  nombre: string | null;
+  titulo: string | null;
+  objetivo: string | null;
+  bio: string | null;
 }
 
 export interface Daily {

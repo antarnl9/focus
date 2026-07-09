@@ -68,6 +68,14 @@ export function QuickActions() {
     <section>
       <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-400">Ajustes rápidos</h2>
       <div className="space-y-2">
+        <Link href="/perfil" className="card flex items-center gap-3 p-3 active:scale-[0.99]">
+          <span className="text-xl">🧭</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Mi perfil y objetivo</p>
+            <p className="text-xs text-slate-500">Define quién eres; la IA lo usa en tu Daily y coach.</p>
+          </div>
+          <span className="text-slate-600">›</span>
+        </Link>
         <Link href="/personas" className="card flex items-center gap-3 p-3 active:scale-[0.99]">
           <span className="text-xl">👤</span>
           <div className="flex-1">

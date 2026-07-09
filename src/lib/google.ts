@@ -2,7 +2,7 @@ import { google, calendar_v3 } from 'googleapis';
 import { env } from './env';
 import { encrypt, decrypt } from './crypto';
 import { createSupabaseAdmin } from './supabase/admin';
-import { TZ, localDateStr, weekdaysStr } from './time';
+import { TZ, localDateStr } from './time';
 import type { CalendarEvent } from './types';
 
 // Construye un cliente OAuth2 autorizado para el usuario a partir de los tokens
@@ -89,14 +89,13 @@ export async function listTodayEvents(userId: string): Promise<CalendarEvent[]> 
   }
 }
 
-// Lectura semanal (lun-vie) de eventos EXTERNOS (no creados por Focus).
+// Lectura de eventos EXTERNOS (no creados por Focus) en un rango de fechas.
 // Se usa para medir el cumplimiento de bloques protegidos (spec §9 Fase 4).
-export async function listWeekEvents(userId: string): Promise<CalendarEvent[]> {
+export async function listEventsBetween(userId: string, desde: string, hasta: string): Promise<CalendarEvent[]> {
   const cal = await getCalendarClient(userId);
   if (!cal) return [];
-  const dias = weekdaysStr();
-  const timeMin = new Date(`${dias[0]}T00:00:00`);
-  const timeMax = new Date(`${dias[dias.length - 1]}T23:59:59`);
+  const timeMin = new Date(`${desde}T00:00:00`);
+  const timeMax = new Date(`${hasta}T23:59:59`);
   try {
     const res = await cal.events.list({
       calendarId: env.googleCalendarId,
