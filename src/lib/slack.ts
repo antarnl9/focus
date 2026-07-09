@@ -1,11 +1,38 @@
 import crypto from 'node:crypto';
 import { WebClient } from '@slack/web-api';
 import { env } from './env';
+import { encrypt, decrypt } from './crypto';
+import { createSupabaseAdmin } from './supabase/admin';
 
 let _web: WebClient | null = null;
 export function slack(): WebClient {
   if (!_web) _web = new WebClient(env.slackBotToken());
   return _web;
+}
+
+// --- Token de USUARIO (xoxp) para leer DMs/canales del COO (contexto). ---
+export async function saveSlackUserToken(userId: string, token: string) {
+  const admin = createSupabaseAdmin();
+  await admin.from('integraciones').upsert(
+    { user_id: userId, proveedor: 'slack', access_token: encrypt(token), scopes: 'user:history', updated_at: new Date().toISOString() },
+    { onConflict: 'user_id,proveedor' }
+  );
+}
+
+export async function getSlackUserToken(userId: string): Promise<string | null> {
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from('integraciones')
+    .select('access_token')
+    .eq('user_id', userId)
+    .eq('proveedor', 'slack')
+    .maybeSingle();
+  if (!data?.access_token) return null;
+  try {
+    return decrypt(data.access_token);
+  } catch {
+    return data.access_token;
+  }
 }
 
 // --- Verificación de firma (spec §8): X-Slack-Signature en todos los webhooks. ---

@@ -278,6 +278,16 @@ ${input.prioridadesPendientes.map((p) => `- P${p.tier} ${p.texto}`).join('\n') |
 }
 
 // ---------------------------------------------------------------------------
+//  (h) Resumen de conversaciones de Slack (contexto).
+// ---------------------------------------------------------------------------
+export async function summarizeSlack(digest: string): Promise<string> {
+  const system = `Eres el asistente del COO de T1. Recibes un volcado de sus conversaciones recientes de Slack (DMs y canales).
+Resume lo relevante para el COO en viñetas por tema/persona: decisiones pendientes, cosas que esperan de él, riesgos, y de qué se está hablando en cada frente.
+Sé conciso y accionable. No copies mensajes literales; sintetiza. Máximo ~15 viñetas. Responde solo con el resumen en markdown.`;
+  return (await completeText(system, digest.slice(0, 120000), 1800)).trim();
+}
+
+// ---------------------------------------------------------------------------
 //  (e) Resumen pre-ventana (DM 15 min antes).
 // ---------------------------------------------------------------------------
 export async function preWindowSummary(

@@ -34,6 +34,8 @@ export const env = {
   slackSigningSecret: () => required('SLACK_SIGNING_SECRET'),
   slackDudasChannel: optional('SLACK_DUDAS_CHANNEL_ID'),
   slackDailyChannel: optional('SLACK_DAILY_CHANNEL_ID'),
+  slackClientId: optional('SLACK_CLIENT_ID'),
+  slackClientSecret: optional('SLACK_CLIENT_SECRET'),
 
   googleClientId: optional('GOOGLE_CLIENT_ID'),
   googleClientSecret: optional('GOOGLE_CLIENT_SECRET'),

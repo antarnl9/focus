@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CooProfile } from './types';
+import { getSlackContextSummary } from './slackcontext';
 
 // Perfil del COO (quién es + su objetivo). Alimenta al Daily y al coach.
 export async function getCooProfile(client: SupabaseClient, userId: string): Promise<CooProfile> {
@@ -36,8 +37,12 @@ export async function getBusinessContext(client: SupabaseClient, userId: string)
   return `Unidades de negocio de T1:\n${lines.join('\n')}`;
 }
 
-// Contexto completo (perfil del COO + negocios) para el Daily y el coach.
+// Contexto completo (perfil del COO + negocios + Slack) para el Daily y el coach.
 export async function fullCooContext(client: SupabaseClient, userId: string): Promise<string> {
-  const [profile, negocios] = await Promise.all([getCooProfile(client, userId), getBusinessContext(client, userId)]);
-  return [cooContextString(profile), negocios].filter(Boolean).join('\n\n');
+  const [profile, negocios, slack] = await Promise.all([
+    getCooProfile(client, userId),
+    getBusinessContext(client, userId),
+    getSlackContextSummary(client, userId),
+  ]);
+  return [cooContextString(profile), negocios, slack].filter(Boolean).join('\n\n');
 }

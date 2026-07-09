@@ -102,6 +102,14 @@ export function QuickActions() {
           </div>
           <span className="text-slate-600">›</span>
         </Link>
+        <Link href="/contexto" className="card flex items-center gap-3 p-3 active:scale-[0.99]">
+          <span className="text-xl">💬</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Contexto de Slack</p>
+            <p className="text-xs text-slate-500">Conecta tu Slack; resume tus DMs y canales para la IA.</p>
+          </div>
+          <span className="text-slate-600">›</span>
+        </Link>
         <Link href="/personas" className="card flex items-center gap-3 p-3 active:scale-[0.99]">
           <span className="text-xl">👤</span>
           <div className="flex-1">
