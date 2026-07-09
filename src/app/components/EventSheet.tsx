@@ -21,6 +21,7 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
   const [personas, setPersonas] = useState<P[]>([]);
   const [sel, setSel] = useState<Map<string, P>>(new Map()); // correo -> persona
   const [query, setQuery] = useState('');
+  const [emailInput, setEmailInput] = useState('');
   const [horaIni, setHoraIni] = useState(localTimeStr(new Date(event.start)));
   const [horaFin, setHoraFin] = useState(localTimeStr(new Date(event.end)));
   const [busy, setBusy] = useState(false);
@@ -52,6 +53,13 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
       else n.set(p.correo, p);
       return n;
     });
+  }
+
+  function addEmail() {
+    const e = emailInput.trim().toLowerCase();
+    if (!e.includes('@') || !e.includes('.')) return;
+    setSel((prev) => new Map(prev).set(e, { id: e, nombre: e, puesto: null, correo: e, rango: 999, tipo: 'otro' }));
+    setEmailInput('');
   }
 
   async function call(body: object, okMsg: string) {
@@ -111,13 +119,25 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
         )}
 
         {/* Buscador */}
-        <div className="mt-3 shrink-0">
+        <div className="mt-3 shrink-0 space-y-2">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={`Buscar entre ${personas.length} personas…`}
             className="w-full rounded-xl bg-ink-900 px-3 py-2.5 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand"
           />
+          <div className="flex items-center gap-2">
+            <input
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addEmail()}
+              placeholder="…o escribe un correo"
+              className="min-w-0 flex-1 rounded-xl bg-ink-900 px-3 py-2 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand"
+            />
+            <button onClick={addEmail} className="btn-ghost px-4 py-2 text-sm">
+              +
+            </button>
+          </div>
         </div>
 
         {/* Lista (scroll) */}
