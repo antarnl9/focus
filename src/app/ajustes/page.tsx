@@ -10,7 +10,6 @@ const LINKS = [
   { href: '/perfil', icon: '🧭', label: 'Mi perfil y objetivo', desc: 'Quién eres y tu objetivo; alimenta la IA.' },
   { href: '/negocios', icon: '🏢', label: 'Negocios T1', desc: 'Contexto y objetivo anual por unidad.' },
   { href: '/personas', icon: '👤', label: 'Personas', desc: 'Directorio del equipo, clientes y proveedores.' },
-  { href: '/contexto', icon: '💬', label: 'Contexto de Slack', desc: 'Conecta y resume tus conversaciones.' },
 ];
 
 export default async function AjustesPage() {

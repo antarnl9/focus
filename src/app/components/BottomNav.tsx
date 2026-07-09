@@ -1,11 +1,12 @@
 'use client';
 
-export type Tab = 'hoy' | 'dudas' | 'bitacora' | 'juntas' | 'daily';
+export type Tab = 'hoy' | 'dudas' | 'juntas' | 'slack' | 'bitacora' | 'daily';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'hoy', label: 'Hoy', icon: '🗓️' },
   { id: 'dudas', label: 'Dudas', icon: '❓' },
   { id: 'juntas', label: 'Juntas', icon: '🎙️' },
+  { id: 'slack', label: 'Slack', icon: '💬' },
   { id: 'bitacora', label: 'Bitácora', icon: '📖' },
   { id: 'daily', label: 'Daily', icon: '📊' },
 ];
@@ -23,7 +24,7 @@ export function BottomNav({
 }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink-800 bg-ink-950/95 backdrop-blur safe-bottom">
-      <div className="mx-auto grid max-w-lg grid-cols-5">
+      <div className="mx-auto grid max-w-lg grid-cols-6">
         {TABS.map((t) => {
           const active = tab === t.id;
           return (

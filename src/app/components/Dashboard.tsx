@@ -15,6 +15,7 @@ import { DailyPanel } from './DailyPanel';
 import { BottomNav, type Tab } from './BottomNav';
 import { InstallPrompt } from './InstallPrompt';
 import { DudaEnPersona } from './DudaEnPersona';
+import { SlackContextView } from './SlackContextView';
 
 interface Props {
   nombre: string;
@@ -116,6 +117,13 @@ export function Dashboard(props: Props) {
         )}
 
         {tab === 'juntas' && <Recorder initial={props.initialGrabaciones} blocks={todayBlocks} now={now} />}
+
+        {tab === 'slack' && (
+          <section>
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Contexto de Slack</h2>
+            <SlackContextView />
+          </section>
+        )}
 
         {tab === 'daily' && <DailyPanel today={props.today} initial={props.initialDaily} />}
       </main>

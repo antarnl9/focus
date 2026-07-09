@@ -280,11 +280,21 @@ ${input.prioridadesPendientes.map((p) => `- P${p.tier} ${p.texto}`).join('\n') |
 // ---------------------------------------------------------------------------
 //  (h) Resumen de conversaciones de Slack (contexto).
 // ---------------------------------------------------------------------------
-export async function summarizeSlack(digest: string): Promise<string> {
-  const system = `Eres el asistente del COO de T1. Recibes un volcado de sus conversaciones recientes de Slack (DMs y canales).
-Resume lo relevante para el COO en viñetas por tema/persona: decisiones pendientes, cosas que esperan de él, riesgos, y de qué se está hablando en cada frente.
-Sé conciso y accionable. No copies mensajes literales; sintetiza. Máximo ~15 viñetas. Responde solo con el resumen en markdown.`;
-  return (await completeText(system, digest.slice(0, 120000), 1800)).trim();
+export interface SlackSummary {
+  resumen: string;
+  recomendaciones: string;
+}
+
+export async function summarizeSlack(digest: string): Promise<SlackSummary> {
+  const system = `Eres el chief of staff del COO de T1. Recibes un volcado de sus conversaciones recientes de Slack (DMs y canales).
+Devuelve JSON con dos campos en markdown:
+- "resumen": viñetas por tema/persona de lo que se está hablando (decisiones pendientes, qué esperan de él, riesgos). Conciso, sintetizado, no copies literal. ~10 viñetas.
+- "recomendaciones": viñetas de LO MÁS IMPORTANTE A ATACAR por el COO, priorizado (lo que debe decidir/responder/desbloquear hoy, con la persona o tema). 3-6 viñetas, muy accionable.`;
+  return completeJSON<SlackSummary>(
+    system + '\n\nResponde SOLO JSON válido.',
+    digest.slice(0, 120000),
+    2200
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -8,5 +8,5 @@ export async function POST() {
   if (!auth.ok) return auth.response;
   const res = await syncSlackContext(auth.user.id);
   if (!res.ok) return NextResponse.json({ error: res.error }, { status: 400 });
-  return NextResponse.json({ mensajes: res.mensajes, resumen: res.resumen });
+  return NextResponse.json({ mensajes: res.mensajes, resumen: res.resumen, recomendaciones: res.recomendaciones });
 }

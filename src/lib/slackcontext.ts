@@ -90,19 +90,24 @@ async function buildDigest(userToken: string): Promise<{ text: string; mensajes:
 }
 
 // Sincroniza el contexto de Slack: jala → resume → guarda.
-export async function syncSlackContext(userId: string): Promise<{ ok: boolean; mensajes: number; resumen: string; error?: string }> {
+export async function syncSlackContext(
+  userId: string
+): Promise<{ ok: boolean; mensajes: number; resumen: string; recomendaciones: string; error?: string }> {
   const token = await getSlackUserToken(userId);
-  if (!token) return { ok: false, mensajes: 0, resumen: '', error: 'Slack no conectado' };
+  if (!token) return { ok: false, mensajes: 0, resumen: '', recomendaciones: '', error: 'Slack no conectado' };
 
   const { text, mensajes, convs, note } = await buildDigest(token);
   let resumen = '';
+  let recomendaciones = '';
   if (mensajes === 0) {
     resumen = note
       ? `No jalé mensajes. ${note}(Revisé ${convs} conversaciones.)`
       : `Sin mensajes en las últimas 48 h. Revisé ${convs} conversaciones.`;
   } else if (hasAnthropic()) {
     try {
-      resumen = await summarizeSlack(text);
+      const s = await summarizeSlack(text);
+      resumen = s.resumen;
+      recomendaciones = s.recomendaciones;
     } catch (e) {
       console.error('[slackcontext] summarize', e);
       resumen = 'No se pudo resumir (IA).';
@@ -113,14 +118,16 @@ export async function syncSlackContext(userId: string): Promise<{ ok: boolean; m
 
   const admin = createSupabaseAdmin();
   await admin.from('slack_context').upsert(
-    { user_id: userId, resumen, mensajes, actualizado: new Date().toISOString() },
+    { user_id: userId, resumen, recomendaciones, mensajes, actualizado: new Date().toISOString() },
     { onConflict: 'user_id' }
   );
-  return { ok: true, mensajes, resumen };
+  return { ok: true, mensajes, resumen, recomendaciones };
 }
 
-// Resumen guardado (para alimentar la IA del Daily / coach).
+// Contexto guardado (para alimentar la IA del Daily / coach).
 export async function getSlackContextSummary(client: SupabaseClient, userId: string): Promise<string> {
-  const { data } = await client.from('slack_context').select('resumen').eq('user_id', userId).maybeSingle();
-  return data?.resumen ? `Contexto reciente de Slack del COO:\n${data.resumen}` : '';
+  const { data } = await client.from('slack_context').select('resumen, recomendaciones').eq('user_id', userId).maybeSingle();
+  if (!data?.resumen) return '';
+  const rec = data.recomendaciones ? `\nA atacar según Slack:\n${data.recomendaciones}` : '';
+  return `Contexto reciente de Slack del COO:\n${data.resumen}${rec}`;
 }
