@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { composeDaily, type DailyInput } from './anthropic';
-import { getCooProfile, cooContextString } from './coo';
+import { fullCooContext } from './coo';
 
 // Reúne los insumos del Daily desde la BD (spec §3.6). Funciona con el cliente
 // del usuario (RLS) o con el admin (cron/worker) — solo hay que filtrar por user_id.
@@ -38,7 +38,7 @@ export async function gatherDailyData(client: SupabaseClient, userId: string, fe
 // Compone el Daily con IA y lo guarda (upsert) en la tabla dailies.
 export async function generateAndSaveDaily(client: SupabaseClient, userId: string, fecha: string): Promise<string> {
   const input = await gatherDailyData(client, userId, fecha);
-  const contexto = cooContextString(await getCooProfile(client, userId));
+  const contexto = await fullCooContext(client, userId);
   const contenido = await composeDaily(input, contexto);
   await client.from('dailies').upsert(
     { user_id: userId, fecha, contenido, enviado_slack: false },

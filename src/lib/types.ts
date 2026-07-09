@@ -104,6 +104,16 @@ export interface CooProfile {
   bio: string | null;
 }
 
+export interface Negocio {
+  id: string;
+  user_id: string;
+  nombre: string;
+  contexto: string | null;
+  objetivo_anual: string | null;
+  orden: number;
+  created_at: string;
+}
+
 export interface Daily {
   id: string;
   user_id: string;

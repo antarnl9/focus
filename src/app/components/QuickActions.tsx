@@ -76,6 +76,14 @@ export function QuickActions() {
           </div>
           <span className="text-slate-600">›</span>
         </Link>
+        <Link href="/negocios" className="card flex items-center gap-3 p-3 active:scale-[0.99]">
+          <span className="text-xl">🏢</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Negocios T1</p>
+            <p className="text-xs text-slate-500">Contexto y objetivo anual de T1 Tienda, Envíos, Pagos…</p>
+          </div>
+          <span className="text-slate-600">›</span>
+        </Link>
         <Link href="/personas" className="card flex items-center gap-3 p-3 active:scale-[0.99]">
           <span className="text-xl">👤</span>
           <div className="flex-1">

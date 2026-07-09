@@ -3,7 +3,7 @@ import { requireUser } from '@/lib/auth';
 import { hasAnthropic } from '@/lib/env';
 import { computeMetrics } from '@/lib/metrics';
 import { alignmentCoach } from '@/lib/anthropic';
-import { getCooProfile, cooContextString } from '@/lib/coo';
+import { fullCooContext } from '@/lib/coo';
 import { localDateStr, addDaysStr } from '@/lib/time';
 
 // Coach de alineación con IA: ¿voy alineado a mis prioridades y objetivo?
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   const desde = body.desde || addDaysStr(hasta, -6);
 
   try {
-    const [metrics, priosR, bitR, grabsR, profile] = await Promise.all([
+    const [metrics, priosR, bitR, grabsR, contexto] = await Promise.all([
       computeMetrics(supabase, user.id, desde, hasta),
       supabase.from('prioridades').select('tier, texto, done').eq('user_id', user.id).order('tier'),
       supabase
@@ -29,14 +29,14 @@ export async function POST(request: Request) {
         .lte('fecha', hasta)
         .order('created_at', { ascending: false }),
       supabase.from('grabaciones').select('label').eq('user_id', user.id).gte('fecha', desde).lte('fecha', hasta),
-      getCooProfile(supabase, user.id),
+      fullCooContext(supabase, user.id),
     ]);
 
     const juntaMap = new Map<string, number>();
     for (const g of grabsR.data ?? []) juntaMap.set(g.label, (juntaMap.get(g.label) ?? 0) + 1);
 
     const result = await alignmentCoach({
-      contexto: cooContextString(profile),
+      contexto,
       rango: `${desde} a ${hasta}`,
       metricas: {
         dudasCreadas: metrics.dudasCreadas,
