@@ -27,7 +27,8 @@ export function PersonasDirectory({ initial }: { initial: Persona[] }) {
       .select()
       .single();
     setBusy(false);
-    if (data) setPersonas((prev) => [...prev, data as Persona].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+    if (data)
+      setPersonas((prev) => [...prev, data as Persona].sort((a, b) => a.rango - b.rango || a.nombre.localeCompare(b.nombre)));
     setNombre('');
     setPuesto('');
     setCorreo('');

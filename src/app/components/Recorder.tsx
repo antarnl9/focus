@@ -74,7 +74,7 @@ export function Recorder({ initial, blocks, now }: { initial: Grabacion[]; block
   }, [items]);
 
   async function fetchPersonas() {
-    const { data } = await supabase.from('personas').select('*').order('nombre');
+    const { data } = await supabase.from('personas').select('*').order('rango').order('nombre');
     if (data) setPersonas(data as Persona[]);
   }
 

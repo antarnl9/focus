@@ -25,6 +25,7 @@ export function PersonaProfile({
     slack_user_id: persona.slack_user_id ?? '',
     descripcion: persona.descripcion ?? '',
     tipo: persona.tipo,
+    rango: persona.rango,
   });
   const [busy, setBusy] = useState(false);
 
@@ -43,6 +44,7 @@ export function PersonaProfile({
         slack_user_id: form.slack_user_id.trim() || null,
         descripcion: form.descripcion.trim() || null,
         tipo: form.tipo,
+        rango: Number(form.rango) || 100,
       })
       .eq('id', persona.id);
     setBusy(false);
@@ -111,6 +113,15 @@ export function PersonaProfile({
               placeholder={form.tipo === 'interno' ? `usuario (se completa @${DOMAIN})` : 'correo@dominio.com'}
             />
             <Field label="Slack user ID" value={form.slack_user_id} onChange={(v) => set('slack_user_id', v)} placeholder="U0XXXXXXX" />
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-slate-500">Rango (orden, menor = más arriba)</label>
+              <input
+                type="number"
+                value={form.rango}
+                onChange={(e) => set('rango', Number(e.target.value))}
+                className="mt-1 w-full rounded-lg bg-ink-900 px-3 py-2 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand"
+              />
+            </div>
             <div>
               <label className="text-[10px] uppercase tracking-wide text-slate-500">Descripción / perfil</label>
               <textarea

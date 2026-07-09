@@ -13,7 +13,7 @@ export default async function PersonasPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data } = await supabase.from('personas').select('*').eq('user_id', user.id).order('nombre');
+  const { data } = await supabase.from('personas').select('*').eq('user_id', user.id).order('rango').order('nombre');
 
   return (
     <div className="flex min-h-dvh flex-col bg-ink-950">

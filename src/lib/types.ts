@@ -94,6 +94,7 @@ export interface Persona {
   slack_user_id: string | null;
   descripcion: string | null;
   tipo: PersonaTipo;
+  rango: number;
   created_at: string;
 }
 
