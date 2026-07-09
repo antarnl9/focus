@@ -157,6 +157,32 @@ export async function listAttendees(userId: string, desde: string, hasta: string
   }
 }
 
+// Crea un evento nuevo en Calendar (hoy) con invitados y les manda el invite.
+export async function createEvent(
+  userId: string,
+  p: { summary: string; fecha: string; horaIni: string; horaFin: string; emails: string[]; description?: string }
+): Promise<{ ok: boolean; error?: string }> {
+  const cal = await getCalendarClient(userId);
+  if (!cal) return { ok: false, error: 'Calendar no conectado' };
+  try {
+    await cal.events.insert({
+      calendarId: env.googleCalendarId,
+      sendUpdates: 'all',
+      requestBody: {
+        summary: p.summary,
+        description: p.description || undefined,
+        start: { dateTime: `${p.fecha}T${p.horaIni}:00`, timeZone: TZ },
+        end: { dateTime: `${p.fecha}T${p.horaFin}:00`, timeZone: TZ },
+        attendees: p.emails.map((e) => ({ email: e })),
+      },
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('[google] createEvent', err);
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
 // --- Operaciones sobre un evento (para editar desde la app) ---
 
 // Agrega invitados a un evento y les manda el invite por correo.

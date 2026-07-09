@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DayBlock, BlockTipo } from '@/lib/types';
-import { WEEKDAYS } from '@/lib/defaults';
-import { BLOCK_META } from '@/lib/defaults';
+import { WEEKDAYS, BLOCK_META } from '@/lib/defaults';
+import { localDateStr } from '@/lib/time';
+import { PeoplePicker } from './PeoplePicker';
 
 const TIPOS: BlockTipo[] = ['fija', 'protegido', 'dudas', 'flex', 'comida', 'neutral'];
 
@@ -27,6 +28,27 @@ export function BlockSheet({
   const [tipo, setTipo] = useState<BlockTipo>(block.tipo);
   const [dias, setDias] = useState<number[]>(block.dias ?? []);
   const [busy, setBusy] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [emails, setEmails] = useState<string[]>([]);
+  const [inviting, setInviting] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState<string | null>(null);
+
+  async function crearEInvitar() {
+    if (emails.length === 0) return;
+    setInviting(true);
+    setInviteMsg(null);
+    const res = await fetch('/api/calendar/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ summary: label.trim() || block.label, fecha: localDateStr(), hora_ini: horaIni, hora_fin: horaFin, emails }),
+    });
+    setInviting(false);
+    if (res.ok) setInviteMsg('✅ Junta creada en Calendar e invitaciones enviadas.');
+    else {
+      const j = await res.json().catch(() => ({}));
+      setInviteMsg('Error: ' + (j.error || 'no se pudo. ¿Conectaste Calendar?'));
+    }
+  }
 
   function toggleDia(v: number) {
     setDias((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
@@ -92,6 +114,26 @@ export function BlockSheet({
               {d.label}
             </button>
           ))}
+        </div>
+
+        {/* Crear junta e invitar en Calendar */}
+        <div className="mt-3 rounded-xl border border-ink-700 bg-ink-900/50 p-3">
+          <button onClick={() => setShowInvite((v) => !v)} className="flex w-full items-center justify-between text-sm font-semibold">
+            <span>📨 Crear junta e invitar</span>
+            <span className="text-slate-500">{showInvite ? '▲' : '▼'}</span>
+          </button>
+          {showInvite && (
+            <div className="mt-2 space-y-2">
+              <p className="text-[11px] text-slate-500">
+                Crea un evento en Google Calendar hoy de {horaIni} a {horaFin} con este nombre e invita a quien elijas.
+              </p>
+              <PeoplePicker onChange={setEmails} />
+              <button onClick={crearEInvitar} disabled={inviting || emails.length === 0} className="btn-primary w-full text-sm">
+                {inviting ? 'Creando…' : `📨 Crear e invitar ${emails.length > 0 ? `a ${emails.length}` : ''}`}
+              </button>
+              {inviteMsg && <p className="text-center text-xs text-slate-300">{inviteMsg}</p>}
+            </div>
+          )}
         </div>
 
         <div className="mt-4 flex gap-2">
