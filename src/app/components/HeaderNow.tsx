@@ -55,15 +55,13 @@ export function HeaderNow({
           >
             Métricas
           </Link>
-          <form action="/auth/signout" method="post">
-            <button
-              type="submit"
-              className="rounded-full border border-ink-700 px-3 py-1.5 text-xs text-slate-400 active:scale-95"
-              aria-label="Cerrar sesión"
-            >
-              Salir
-            </button>
-          </form>
+          <Link
+            href="/ajustes"
+            aria-label="Ajustes y perfil"
+            className="grid h-8 w-8 place-items-center rounded-full bg-brand-deep/30 text-xs font-bold text-brand-soft active:scale-95"
+          >
+            {nombre.slice(0, 2).toUpperCase()}
+          </Link>
         </div>
       </div>
 

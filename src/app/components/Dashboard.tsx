@@ -14,7 +14,6 @@ import { Recorder } from './Recorder';
 import { DailyPanel } from './DailyPanel';
 import { BottomNav, type Tab } from './BottomNav';
 import { InstallPrompt } from './InstallPrompt';
-import { QuickActions } from './QuickActions';
 import { DudaEnPersona } from './DudaEnPersona';
 
 interface Props {
@@ -102,7 +101,6 @@ export function Dashboard(props: Props) {
               onBlockDeleted={onBlockDeleted}
             />
             <Prioridades supabase={supabase} initial={props.initialPrioridades} onLog={refetchBitacora} />
-            <QuickActions />
           </div>
         )}
 
