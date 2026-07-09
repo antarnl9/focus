@@ -37,8 +37,11 @@ export function PersonasDirectory({ initial }: { initial: Persona[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">Tu directorio: liga juntas y dudas a cada persona.</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 flex-1 text-sm text-slate-400">Tu directorio: liga juntas y dudas a cada persona.</p>
+        <Link href="/personas/import" className="chip bg-ink-700 text-slate-300 active:scale-95">
+          ⤵️ Importar
+        </Link>
         <button onClick={() => setAdding((v) => !v)} className="chip bg-brand text-white">
           {adding ? 'Cancelar' : '+ Nueva'}
         </button>

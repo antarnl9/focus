@@ -2,19 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ===== Temas (oscuro por defecto / claro) — canales RGB para permitir opacidad ===== */
+:root,
+:root[data-theme='dark'] {
+  --ink-950: 10 11 15;
+  --ink-900: 18 20 28;
+  --ink-800: 26 29 41;
+  --ink-700: 36 40 56;
+  --ink-600: 51 56 73;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
   color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --ink-950: 240 242 246; /* fondo de página */
+  --ink-900: 248 250 252; /* fondo de inputs */
+  --ink-800: 255 255 255; /* fondo de tarjetas */
+  --ink-700: 226 232 240; /* bordes */
+  --ink-600: 203 213 225; /* bordes fuertes */
+  --slate-100: 15 23 42; /* texto principal (oscuro) */
+  --slate-200: 30 41 59;
+  --slate-300: 51 65 85;
+  --slate-400: 71 85 105; /* texto secundario */
+  --slate-500: 100 116 139;
+  --slate-600: 148 163 184; /* texto tenue */
+  color-scheme: light;
 }
 
 html,
 body {
-  background: #0a0b0f;
-  color: #e5e7eb;
+  background: rgb(var(--ink-950));
+  color: rgb(var(--slate-100));
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
 }
 
-/* Respeta el notch / barra inferior en iOS (PWA extremadamente responsiva). */
 body {
   min-height: 100dvh;
 }
@@ -26,7 +53,6 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Oculta scrollbars horizontales en carruseles móviles. */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -35,7 +61,6 @@ body {
   scrollbar-width: none;
 }
 
-/* Inputs cómodos en móvil (evita zoom de iOS < 16px). */
 input,
 textarea,
 select,

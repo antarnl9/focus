@@ -29,6 +29,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('focus-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();`,
+          }}
+        />
         {children}
         <RegisterSW />
       </body>

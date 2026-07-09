@@ -122,6 +122,36 @@ export async function listEventsBetween(userId: string, desde: string, hasta: st
   }
 }
 
+// Invitados de eventos en un rango (para importar personas). Excluye al COO.
+export async function listAttendees(userId: string, desde: string, hasta: string): Promise<{ email: string; nombre: string }[]> {
+  const cal = await getCalendarClient(userId);
+  if (!cal) return [];
+  try {
+    const res = await cal.events.list({
+      calendarId: env.googleCalendarId,
+      timeMin: new Date(`${desde}T00:00:00`).toISOString(),
+      timeMax: new Date(`${hasta}T23:59:59`).toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+      timeZone: TZ,
+      maxResults: 250,
+    });
+    const map = new Map<string, { email: string; nombre: string }>();
+    for (const e of res.data.items ?? []) {
+      for (const a of e.attendees ?? []) {
+        if (a.self || a.resource) continue;
+        const email = (a.email ?? '').toLowerCase();
+        if (!email || map.has(email)) continue;
+        map.set(email, { email, nombre: a.displayName || email.split('@')[0] });
+      }
+    }
+    return [...map.values()];
+  } catch (err) {
+    console.error('[google] listAttendees', err);
+    return [];
+  }
+}
+
 // Escritura: crea la plantilla como eventos recurrentes (spec §3.1 / §5.2).
 // Bloques 'protegido' y 'comida' como ocupado (opaque); 'dudas' con descripción.
 export async function writeTemplateToCalendar(
