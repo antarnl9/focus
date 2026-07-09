@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -67,6 +68,15 @@ export function QuickActions() {
     <section>
       <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-400">Ajustes rápidos</h2>
       <div className="space-y-2">
+        <Link href="/personas" className="card flex items-center gap-3 p-3 active:scale-[0.99]">
+          <span className="text-xl">👤</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Personas</p>
+            <p className="text-xs text-slate-500">Directorio: liga juntas y dudas a cada persona.</p>
+          </div>
+          <span className="text-slate-600">›</span>
+        </Link>
+
         {pushState !== 'on' && pushState !== 'unavailable' && (
           <button onClick={enablePush} className="card flex w-full items-center gap-3 p-3 text-left active:scale-[0.99]">
             <span className="text-xl">🔔</span>

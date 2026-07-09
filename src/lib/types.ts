@@ -83,6 +83,17 @@ export interface Grabacion {
   created_at: string;
 }
 
+export interface Persona {
+  id: string;
+  user_id: string;
+  nombre: string;
+  puesto: string | null;
+  correo: string | null;
+  slack_user_id: string | null;
+  descripcion: string | null;
+  created_at: string;
+}
+
 export interface Daily {
   id: string;
   user_id: string;
