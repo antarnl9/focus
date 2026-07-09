@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import Link from 'next/link';
 import type { DayBlock, CalendarEvent } from '@/lib/types';
 import { minutesOfDay, hmToMinutes, prettyTime } from '@/lib/time';
 import { BLOCK_META } from '@/lib/defaults';
@@ -49,9 +50,12 @@ export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; event
     <section>
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-400">Agenda de hoy</h2>
-        {events.length > 0 && (
-          <span className="chip bg-ink-700 text-slate-400">{events.length} de Calendar</span>
-        )}
+        <div className="flex items-center gap-2">
+          {events.length > 0 && <span className="chip bg-ink-700 text-slate-400">{events.length} de Calendar</span>}
+          <Link href="/agenda" className="chip bg-ink-700 text-slate-300 active:scale-95">
+            ✏️ Editar
+          </Link>
+        </div>
       </div>
 
       <ol className="space-y-1.5">

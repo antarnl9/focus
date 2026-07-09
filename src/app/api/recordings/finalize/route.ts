@@ -16,12 +16,14 @@ export async function POST(request: Request) {
     mimetype?: string;
   };
 
+  // Si hay Deepgram, queda "subida" (en cola para el worker); si no, "lista"
+  // (audio guardado y reproducible, sin transcripción automática).
+  const estado = hasDeepgram() ? 'subida' : 'lista';
   await supabase
     .from('grabaciones')
-    .update({ audio_path, duracion_seg: duracion_seg || 0, estado: 'subida' })
+    .update({ audio_path, duracion_seg: duracion_seg || 0, estado })
     .eq('id', id);
 
-  // Encola transcripción + resumen si Deepgram está configurado.
   if (hasDeepgram()) {
     await enqueue(QUEUES.transcribe, { grabacionId: id, userId: user.id, audioPath: audio_path, mimetype });
   }

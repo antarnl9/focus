@@ -72,6 +72,7 @@ export interface Grabacion {
   user_id: string;
   label: string;
   block_ref: string | null;
+  persona: string | null;
   fecha: string;
   duracion_seg: number;
   audio_path: string | null;
