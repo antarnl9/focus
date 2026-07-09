@@ -15,6 +15,7 @@ import { DailyPanel } from './DailyPanel';
 import { BottomNav, type Tab } from './BottomNav';
 import { InstallPrompt } from './InstallPrompt';
 import { QuickActions } from './QuickActions';
+import { DudaEnPersona } from './DudaEnPersona';
 
 interface Props {
   nombre: string;
@@ -105,7 +106,12 @@ export function Dashboard(props: Props) {
           </div>
         )}
 
-        {tab === 'dudas' && <DudasList dudas={dudas} onChanged={refetchDudas} onLog={refetchBitacora} />}
+        {tab === 'dudas' && (
+          <div className="space-y-5">
+            <DudaEnPersona supabase={supabase} onSaved={() => { refetchDudas(); refetchBitacora(); }} />
+            <DudasList dudas={dudas} onChanged={refetchDudas} onLog={refetchBitacora} />
+          </div>
+        )}
 
         {tab === 'bitacora' && (
           <Bitacora supabase={supabase} today={props.today} entries={bitacora} onChanged={refetchBitacora} />
