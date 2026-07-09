@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { DayBlock, CalendarEvent } from '@/lib/types';
 import { minutesOfDay, hmToMinutes, prettyTime } from '@/lib/time';
 import { BLOCK_META } from '@/lib/defaults';
+import { EventSheet } from './EventSheet';
 
 interface Item {
   key: string;
@@ -15,10 +16,12 @@ interface Item {
   tipo?: DayBlock['tipo'];
   timeLabel: string;
   link?: string;
+  event?: CalendarEvent;
 }
 
 export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; events: CalendarEvent[]; now: Date }) {
   const mins = minutesOfDay(now);
+  const [selEvent, setSelEvent] = useState<CalendarEvent | null>(null);
 
   const items = useMemo<Item[]>(() => {
     const b: Item[] = blocks.map((bl) => ({
@@ -41,6 +44,7 @@ export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; event
         kind: 'event',
         timeLabel: `${fmt(start)} – ${fmt(end)}`,
         link: ev.htmlLink,
+        event: ev,
       };
     });
     return [...b, ...e].sort((x, y) => x.startMin - y.startMin || x.endMin - y.endMin);
@@ -67,6 +71,8 @@ export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; event
           return (
             <li key={it.key}>
               <div
+                onClick={it.kind === 'event' && it.event ? () => setSelEvent(it.event!) : undefined}
+                role={it.kind === 'event' ? 'button' : undefined}
                 className={[
                   'flex items-stretch gap-3 rounded-xl border px-3 py-2.5 transition',
                   isActive
@@ -75,6 +81,7 @@ export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; event
                     ? 'border-ink-700 bg-ink-800/40'
                     : meta?.color ?? 'border-ink-700 bg-ink-800/60',
                   isPast && !isActive ? 'opacity-45' : '',
+                  it.kind === 'event' ? 'cursor-pointer active:scale-[0.99]' : '',
                 ].join(' ')}
               >
                 <div className="flex w-16 shrink-0 flex-col justify-center">
@@ -95,8 +102,10 @@ export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; event
                     {meta && it.tipo !== 'flex' && it.tipo !== 'neutral' && (
                       <span className={`chip ${chipTone(it.tipo!)}`}>{meta.label}</span>
                     )}
+                    {it.kind === 'event' && <span className="chip bg-ink-700 text-[10px] text-slate-400">toca para editar</span>}
                   </div>
                 </div>
+                {it.kind === 'event' && <span className="self-center text-slate-500">›</span>}
               </div>
             </li>
           );
@@ -105,6 +114,8 @@ export function DayTimeline({ blocks, events, now }: { blocks: DayBlock[]; event
           <li className="card p-4 text-center text-sm text-slate-500">Sin bloques configurados.</li>
         )}
       </ol>
+
+      {selEvent && <EventSheet event={selEvent} onClose={() => setSelEvent(null)} />}
     </section>
   );
 }

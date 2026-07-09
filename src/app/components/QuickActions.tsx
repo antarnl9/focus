@@ -16,6 +16,8 @@ export function QuickActions() {
   const [pushState, setPushState] = useState<'idle' | 'on' | 'unavailable'>('idle');
   const [calState, setCalState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [calMsg, setCalMsg] = useState('');
+  const [cleanState, setCleanState] = useState<'idle' | 'busy' | 'done'>('idle');
+  const [cleanMsg, setCleanMsg] = useState('');
   const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
   useEffect(() => {
@@ -61,6 +63,22 @@ export function QuickActions() {
     } catch (e) {
       setCalState('error');
       setCalMsg((e as Error).message);
+    }
+  }
+
+  async function cleanupFocus() {
+    if (!confirm('¿Borrar del calendario los eventos viejos con "[Focus]"?')) return;
+    setCleanState('busy');
+    setCleanMsg('');
+    try {
+      const res = await fetch('/api/calendar/cleanup', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Error');
+      setCleanState('done');
+      setCleanMsg(`${json.deleted} eventos [Focus] borrados.`);
+    } catch (e) {
+      setCleanState('done');
+      setCleanMsg((e as Error).message);
     }
   }
 
@@ -121,6 +139,19 @@ export function QuickActions() {
           </div>
           <span className={`chip ${calState === 'done' ? 'bg-ok/20 text-ok' : 'bg-ink-700 text-slate-300'}`}>
             {calState === 'busy' ? '…' : calState === 'done' ? '✓' : 'Sincronizar'}
+          </span>
+        </button>
+
+        <button onClick={cleanupFocus} disabled={cleanState === 'busy'} className="card flex w-full items-center gap-3 p-3 text-left active:scale-[0.99]">
+          <span className="text-xl">🧹</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Limpiar eventos [Focus] del calendario</p>
+            <p className="text-xs text-slate-500">
+              {cleanState === 'done' ? cleanMsg : 'Borra los eventos viejos con prefijo "[Focus]".'}
+            </p>
+          </div>
+          <span className={`chip ${cleanState === 'done' ? 'bg-ok/20 text-ok' : 'bg-ink-700 text-slate-300'}`}>
+            {cleanState === 'busy' ? '…' : cleanState === 'done' ? '✓' : 'Limpiar'}
           </span>
         </button>
       </div>

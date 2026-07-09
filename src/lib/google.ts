@@ -45,6 +45,11 @@ function safeDecrypt(v: string): string {
   }
 }
 
+// ¿El evento lo creó Focus? (por etiqueta nueva o por el prefijo viejo [Focus]).
+function isFocusEvent(e: { summary?: string | null; extendedProperties?: { private?: Record<string, string> | null } | null }): boolean {
+  return e.extendedProperties?.private?.focus === '1' || (e.summary ?? '').startsWith('[Focus]');
+}
+
 // Guarda los tokens del provider Google (del login OAuth) cifrados.
 export async function saveGoogleTokens(userId: string, accessToken?: string | null, refreshToken?: string | null, expiresIn?: number) {
   const admin = createSupabaseAdmin();
@@ -74,7 +79,7 @@ export async function listTodayEvents(userId: string): Promise<CalendarEvent[]> 
       maxResults: 50,
     });
     return (res.data.items ?? [])
-      .filter((e) => e.start?.dateTime || e.start?.date)
+      .filter((e) => (e.start?.dateTime || e.start?.date) && !isFocusEvent(e))
       .map((e) => ({
         id: e.id ?? '',
         summary: e.summary ?? '(sin título)',
@@ -107,7 +112,7 @@ export async function listEventsBetween(userId: string, desde: string, hasta: st
       maxResults: 250,
     });
     return (res.data.items ?? [])
-      .filter((e) => e.start?.dateTime && !(e.summary ?? '').startsWith('[Focus]'))
+      .filter((e) => e.start?.dateTime && !isFocusEvent(e))
       .map((e) => ({
         id: e.id ?? '',
         summary: e.summary ?? '(sin título)',
@@ -117,7 +122,7 @@ export async function listEventsBetween(userId: string, desde: string, hasta: st
         status: e.status ?? undefined,
       }));
   } catch (err) {
-    console.error('[google] listWeekEvents', err);
+    console.error('[google] listEventsBetween', err);
     return [];
   }
 }
@@ -152,6 +157,102 @@ export async function listAttendees(userId: string, desde: string, hasta: string
   }
 }
 
+// --- Operaciones sobre un evento (para editar desde la app) ---
+
+// Agrega invitados a un evento y les manda el invite por correo.
+export async function inviteToEvent(userId: string, eventId: string, emails: string[]): Promise<{ ok: boolean; error?: string }> {
+  const cal = await getCalendarClient(userId);
+  if (!cal) return { ok: false, error: 'Calendar no conectado' };
+  try {
+    const ev = await cal.events.get({ calendarId: env.googleCalendarId, eventId });
+    const existing = ev.data.attendees ?? [];
+    const set = new Map<string, { email: string }>();
+    for (const a of existing) if (a.email) set.set(a.email.toLowerCase(), { email: a.email });
+    for (const e of emails) if (e) set.set(e.toLowerCase(), { email: e });
+    await cal.events.patch({
+      calendarId: env.googleCalendarId,
+      eventId,
+      sendUpdates: 'all', // manda el invite
+      requestBody: { attendees: [...set.values()] },
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('[google] inviteToEvent', err);
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
+// Mueve un evento (nuevo horario, mismo día del evento).
+export async function rescheduleEvent(userId: string, eventId: string, horaIni: string, horaFin: string): Promise<{ ok: boolean; error?: string }> {
+  const cal = await getCalendarClient(userId);
+  if (!cal) return { ok: false, error: 'Calendar no conectado' };
+  try {
+    const ev = await cal.events.get({ calendarId: env.googleCalendarId, eventId });
+    const fecha = (ev.data.start?.dateTime ?? '').slice(0, 10) || localDateStr();
+    await cal.events.patch({
+      calendarId: env.googleCalendarId,
+      eventId,
+      sendUpdates: 'all',
+      requestBody: {
+        start: { dateTime: `${fecha}T${horaIni}:00`, timeZone: TZ },
+        end: { dateTime: `${fecha}T${horaFin}:00`, timeZone: TZ },
+      },
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('[google] rescheduleEvent', err);
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
+// Cancela (elimina) un evento y avisa a los invitados.
+export async function cancelEvent(userId: string, eventId: string): Promise<{ ok: boolean; error?: string }> {
+  const cal = await getCalendarClient(userId);
+  if (!cal) return { ok: false, error: 'Calendar no conectado' };
+  try {
+    await cal.events.delete({ calendarId: env.googleCalendarId, eventId, sendUpdates: 'all' });
+    return { ok: true };
+  } catch (err) {
+    console.error('[google] cancelEvent', err);
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
+// Borra los eventos viejos con prefijo [Focus] (o etiqueta focus) del calendario.
+export async function cleanupFocusEvents(userId: string): Promise<{ ok: boolean; deleted: number; error?: string }> {
+  const cal = await getCalendarClient(userId);
+  if (!cal) return { ok: false, deleted: 0, error: 'Calendar no conectado' };
+  try {
+    const res = await cal.events.list({
+      calendarId: env.googleCalendarId,
+      timeMin: new Date(Date.now() - 60 * 86400000).toISOString(),
+      timeMax: new Date(Date.now() + 200 * 86400000).toISOString(),
+      singleEvents: false, // trae las series recurrentes (masters)
+      maxResults: 2500,
+    });
+    const ids = new Set<string>();
+    for (const e of res.data.items ?? []) {
+      if (isFocusEvent(e)) ids.add(e.id ?? '');
+    }
+    let deleted = 0;
+    for (const id of ids) {
+      if (!id) continue;
+      try {
+        await cal.events.delete({ calendarId: env.googleCalendarId, eventId: id, sendUpdates: 'none' });
+        deleted++;
+      } catch {
+        /* ya no existe o sin permiso */
+      }
+    }
+    // Limpia referencias en day_blocks.
+    await createSupabaseAdmin().from('day_blocks').update({ gcal_event_id: null }).eq('user_id', userId);
+    return { ok: true, deleted };
+  } catch (err) {
+    console.error('[google] cleanupFocusEvents', err);
+    return { ok: false, deleted: 0, error: (err as Error).message };
+  }
+}
+
 // Escritura: crea la plantilla como eventos recurrentes (spec §3.1 / §5.2).
 // Bloques 'protegido' y 'comida' como ocupado (opaque); 'dudas' con descripción.
 export async function writeTemplateToCalendar(
@@ -178,13 +279,14 @@ export async function writeTemplateToCalendar(
       const res = await cal.events.insert({
         calendarId: env.googleCalendarId,
         requestBody: {
-          summary: `[Focus] ${b.label}`,
+          summary: b.label, // sin prefijo [Focus]
           description: desc || undefined,
           start: { dateTime: `${today}T${b.hora_ini}:00`, timeZone: TZ },
           end: { dateTime: `${today}T${b.hora_fin}:00`, timeZone: TZ },
           recurrence: ['RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR'],
           transparency: busy ? 'opaque' : 'transparent',
           visibility: b.tipo === 'dudas' ? 'public' : 'default',
+          extendedProperties: { private: { focus: '1' } }, // etiqueta interna
         },
       });
       if (res.data.id) {
