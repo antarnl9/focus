@@ -12,7 +12,7 @@ function optional(name: string, fallback = ''): string {
 }
 
 export const env = {
-  appUrl: optional('NEXT_PUBLIC_APP_URL', 'http://localhost:3000').replace(/\/$/, ''),
+  appUrl: optional('NEXT_PUBLIC_APP_URL', 'http://localhost:3000').trim().replace(/\/+$/, ''),
   tz: optional('TZ', 'America/Mexico_City'),
 
   supabaseUrl: () => required('NEXT_PUBLIC_SUPABASE_URL'),
