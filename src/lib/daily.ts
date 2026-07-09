@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { composeDaily, type DailyInput } from './anthropic';
+import { composeDaily, composeCeoDaily, type DailyInput } from './anthropic';
 import { fullCooContext } from './coo';
 
 // Reúne los insumos del Daily desde la BD (spec §3.6). Funciona con el cliente
@@ -35,14 +35,21 @@ export async function gatherDailyData(client: SupabaseClient, userId: string, fe
   };
 }
 
-// Compone el Daily con IA y lo guarda (upsert) en la tabla dailies.
-export async function generateAndSaveDaily(client: SupabaseClient, userId: string, fecha: string): Promise<string> {
+// Compone AMBOS dailies (CEO Brief + personal) y los guarda.
+export async function generateAndSaveDailies(
+  client: SupabaseClient,
+  userId: string,
+  fecha: string
+): Promise<{ ceo: string; personal: string }> {
   const input = await gatherDailyData(client, userId, fecha);
   const contexto = await fullCooContext(client, userId);
-  const contenido = await composeDaily(input, contexto);
+  const [ceo, personal] = await Promise.all([composeCeoDaily(input, contexto), composeDaily(input, contexto)]);
   await client.from('dailies').upsert(
-    { user_id: userId, fecha, contenido, enviado_slack: false },
-    { onConflict: 'user_id,fecha' }
+    [
+      { user_id: userId, fecha, tipo: 'ceo', contenido: ceo, enviado_slack: false },
+      { user_id: userId, fecha, tipo: 'personal', contenido: personal, enviado_slack: false },
+    ],
+    { onConflict: 'user_id,fecha,tipo' }
   );
-  return contenido;
+  return { ceo, personal };
 }

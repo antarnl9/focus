@@ -4,7 +4,7 @@ import { hasSlack } from '@/lib/env';
 import { postDaily } from '@/lib/slack';
 import { localDateStr } from '@/lib/time';
 
-// Envía el Daily a #daily-coo con un clic (spec §3.6) y lo marca en bitácora.
+// Envía el CEO Brief a #daily-ceo-brief con un clic y lo marca en bitácora.
 export async function POST(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
@@ -25,10 +25,10 @@ export async function POST(request: Request) {
   }
 
   await supabase.from('dailies').upsert(
-    { user_id: user.id, fecha, contenido, enviado_slack: true, slack_ts: slackTs },
-    { onConflict: 'user_id,fecha' }
+    { user_id: user.id, fecha, tipo: 'ceo', contenido, enviado_slack: true, slack_ts: slackTs },
+    { onConflict: 'user_id,fecha,tipo' }
   );
-  await supabase.from('bitacora').insert({ user_id: user.id, tipo: 'daily', texto: 'Daily enviado a #daily-coo.' });
+  await supabase.from('bitacora').insert({ user_id: user.id, tipo: 'daily', texto: 'CEO Brief enviado a Slack.' });
 
   return NextResponse.json({ ok: true });
 }

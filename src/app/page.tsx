@@ -33,7 +33,7 @@ export default async function Home() {
     supabase.from('prioridades').select('*').eq('user_id', user.id).order('tier').order('orden'),
     supabase.from('bitacora').select('*').eq('user_id', user.id).eq('fecha', today).order('created_at'),
     supabase.from('grabaciones').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
-    supabase.from('dailies').select('*').eq('user_id', user.id).eq('fecha', today).maybeSingle(),
+    supabase.from('dailies').select('*').eq('user_id', user.id).eq('fecha', today).eq('tipo', 'ceo').maybeSingle(),
     listTodayEvents(user.id).catch(() => [] as CalendarEvent[]),
   ]);
 

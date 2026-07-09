@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { MetricsView } from '@/app/components/MetricsView';
+import { DailyPersonal } from '@/app/components/DailyPersonal';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,8 +22,9 @@ export default async function MetricasPage() {
         <h1 className="text-lg font-bold">Métricas y coach</h1>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 pb-16 pt-4">
+      <main className="flex-1 space-y-8 overflow-y-auto px-4 pb-16 pt-4">
         <MetricsView />
+        <DailyPersonal />
       </main>
     </div>
   );

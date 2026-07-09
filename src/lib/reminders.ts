@@ -1,7 +1,7 @@
 import { createSupabaseAdmin } from './supabase/admin';
 import { getCooUserId, getCooSlackId } from './bootstrap';
 import { preWindowSummary } from './anthropic';
-import { generateAndSaveDaily } from './daily';
+import { generateAndSaveDailies } from './daily';
 import { dmUser } from './slack';
 import { sendPush } from './push';
 import { hasAnthropic, hasSlack, env } from './env';
@@ -55,7 +55,7 @@ export async function runDailyPrompt(): Promise<void> {
 
   if (hasAnthropic()) {
     try {
-      await generateAndSaveDaily(admin, cooId, fecha);
+      await generateAndSaveDailies(admin, cooId, fecha);
     } catch (e) {
       console.error('[reminders] pre-generar Daily', e);
     }

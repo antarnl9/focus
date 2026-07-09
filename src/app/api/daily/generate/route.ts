@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
 import { hasAnthropic } from '@/lib/env';
-import { generateAndSaveDaily } from '@/lib/daily';
+import { generateAndSaveDailies } from '@/lib/daily';
 import { localDateStr } from '@/lib/time';
 
-// Genera el Daily con IA (spec §3.6). Objetivo: <15 s.
+// Genera AMBOS dailies (CEO Brief + personal) con IA. Objetivo <15 s.
 export async function POST() {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
@@ -13,8 +13,8 @@ export async function POST() {
   const { supabase, user } = auth;
   const fecha = localDateStr();
   try {
-    const contenido = await generateAndSaveDaily(supabase, user.id, fecha);
-    return NextResponse.json({ contenido });
+    const { ceo, personal } = await generateAndSaveDailies(supabase, user.id, fecha);
+    return NextResponse.json({ ceo, personal });
   } catch (e) {
     console.error('[daily] generate', e);
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

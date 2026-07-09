@@ -298,6 +298,60 @@ Devuelve JSON con dos campos en markdown:
 }
 
 // ---------------------------------------------------------------------------
+//  (i) CEO Brief — formato estricto para #daily-ceo-brief.
+// ---------------------------------------------------------------------------
+export async function composeCeoDaily(input: DailyInput, contexto = ''): Promise<string> {
+  const system = `${contexto ? contexto + '\n\n' : ''}Eres el chief of staff del COO de T1. Redactas su update diario para el CEO (Arturo) en el canal #daily-ceo-brief, en formato OBLIGATORIO y ejecutivo.
+
+Usa EXACTAMENTE esta estructura (respeta títulos y numeración):
+
+HOY (1–3 outcomes):
+1) …
+2) …
+3) …
+MAÑANA (1–3 prioridades):
+1) …
+2) …
+3) …
+AYUDA (0–2 asks sí/no o A/B):
+- … (o N/A)
+KILL (0–1):
+- … (o N/A)
+MÉTRICA/SEÑAL (1):
+- …
+
+REGLAS (críticas):
+- Máximo 12–14 líneas reales (sin contar títulos).
+- HOY = outcomes/entregables cerrados, NO actividades. Prohibido "llamada con…", "revisé…", "avancé…".
+- MAÑANA = prioridades con entregable concreto.
+- AYUDA = decisión clara sí/no o A vs B (máx 2). Si no hay ask real: N/A.
+- KILL = algo que se pausó/pospuso para mantener foco, o N/A.
+- MÉTRICA/SEÑAL = SIEMPRE debe existir: un número o señal corta y específica (no "todo bien", no "avanzando").
+- No inventes datos: usa la bitácora, dudas, prioridades, acuerdos y el contexto de Slack. Si algo no aplica, N/A.
+- Solo 1–3 por sección (no siempre 3).
+Responde SOLO con el texto del brief, sin encabezados extra.`;
+
+  const user = `Fecha: ${input.fecha}
+
+BITÁCORA DEL DÍA:
+${input.bitacora.map((b) => `- [${b.hora}] (${b.tipo}) ${b.texto}`).join('\n') || '(sin entradas)'}
+
+DUDAS RESUELTAS HOY:
+${input.dudasResueltas.map((d) => `- ${d.autor}: ${d.decision} → ${d.resolucion}`).join('\n') || '(ninguna)'}
+
+DUDAS PENDIENTES:
+${input.dudasPendientes.map((d) => `- ${d.urgente ? '[URGENTE] ' : ''}${d.autor}: ${d.decision}`).join('\n') || '(ninguna)'}
+
+PRIORIDADES:
+${input.prioridades.map((p) => `- P${p.tier} ${p.done ? '[hecho]' : '[pendiente]'} ${p.texto}`).join('\n') || '(ninguna)'}
+
+ACUERDOS DE JUNTAS:
+${input.acuerdos.map((a) => `- (${a.junta}) ${a.acuerdo}${a.responsable ? ` — ${a.responsable}` : ''}${a.fecha ? ` (${a.fecha})` : ''}`).join('\n') || '(ninguno)'}`;
+
+  return (await completeText(system, user, 1200)).trim();
+}
+
+// ---------------------------------------------------------------------------
 //  (e) Resumen pre-ventana (DM 15 min antes).
 // ---------------------------------------------------------------------------
 export async function preWindowSummary(
