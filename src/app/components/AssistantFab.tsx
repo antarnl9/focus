@@ -6,12 +6,20 @@ import { VoiceButton } from './VoiceButton';
 interface PendingAction {
   tool: string;
   input: Record<string, unknown>;
-  resumen: string;
+  titulo: string;
+  detalle: string;
 }
 interface Msg {
   role: 'user' | 'assistant';
   content: string;
 }
+
+const ACTION_META: Record<string, { icon: string; badge: string; border: string; danger?: boolean }> = {
+  mover_junta: { icon: '🕐', badge: 'bg-accent/20 text-accent', border: 'border-accent/40' },
+  crear_junta: { icon: '➕', badge: 'bg-ok/20 text-ok', border: 'border-ok/40' },
+  invitar_a_junta: { icon: '📨', badge: 'bg-brand/20 text-brand-soft', border: 'border-brand/40' },
+  cancelar_junta: { icon: '🗑️', badge: 'bg-urgent/20 text-urgent', border: 'border-urgent/40', danger: true },
+};
 
 const SUGERENCIAS = [
   '¿Qué tengo hoy?',
@@ -132,21 +140,33 @@ export function AssistantFab() {
 
         {loading && <div className="flex justify-start"><div className="rounded-2xl bg-ink-800 px-3.5 py-2.5 text-sm text-slate-500">Pensando…</div></div>}
 
-        {pending.map((a, i) => (
-          <div key={i} className="rounded-2xl border border-brand/40 bg-ink-900 p-3">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">Confirmar acción</p>
-            <p className="mt-0.5 text-sm font-medium text-slate-100">{a.resumen}</p>
-            <p className="mt-0.5 text-[11px] text-slate-500">Manda correo a los invitados.</p>
-            <div className="mt-2 flex gap-2">
-              <button onClick={() => confirmar(a)} disabled={working} className="btn-primary flex-1 py-2 text-sm">
-                {working ? 'Haciendo…' : 'Confirmar'}
-              </button>
-              <button onClick={() => cancelar(a)} className="btn-ghost py-2 text-sm">
-                Cancelar
-              </button>
+        {pending.map((a, i) => {
+          const meta = ACTION_META[a.tool] ?? { icon: '⚡', badge: 'bg-ink-700 text-slate-300', border: 'border-ink-700' };
+          return (
+            <div key={i} className={`rounded-2xl border ${meta.border} bg-ink-900 p-3.5 shadow-pop`}>
+              <div className="flex items-start gap-2.5">
+                <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-xl ${meta.badge}`}>{meta.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-bold text-slate-100">{a.titulo}</p>
+                  <p className="text-sm text-slate-300">{a.detalle}</p>
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">✉️ Se avisa a los invitados por correo</p>
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => confirmar(a)}
+                  disabled={working}
+                  className={`flex-1 rounded-xl py-2.5 text-sm font-bold text-white active:scale-95 disabled:opacity-50 ${meta.danger ? 'bg-urgent' : 'bg-brand'}`}
+                >
+                  {working ? 'Haciendo…' : meta.danger ? 'Sí, cancelar' : 'Confirmar'}
+                </button>
+                <button onClick={() => cancelar(a)} className="rounded-xl border border-ink-700 px-4 py-2.5 text-sm font-medium text-slate-300 active:scale-95">
+                  Ahora no
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="border-t border-ink-800 px-3 py-2.5 safe-bottom">

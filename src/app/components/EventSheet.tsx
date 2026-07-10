@@ -26,7 +26,7 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
   const [horaFin, setHoraFin] = useState(localTimeStr(new Date(event.end)));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [showMas, setShowMas] = useState(false);
+  const [showMover, setShowMover] = useState(false);
 
   useEffect(() => {
     supabase
@@ -168,40 +168,52 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
           {filtered.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Sin resultados.</p>}
         </div>
 
-        {/* Acción invitar */}
+        {/* Acciones */}
         <div className="mt-3 shrink-0 space-y-2">
-          <button
-            onClick={() => call({ action: 'invite', emails: selArr.map((p) => p.correo) }, '✅ Invitaciones enviadas')}
-            disabled={busy || selArr.length === 0}
-            className="btn-primary w-full"
-          >
-            📨 Invitar {selArr.length > 0 ? `a ${selArr.length}` : ''}
-          </button>
+          {selArr.length > 0 && (
+            <button
+              onClick={() => call({ action: 'invite', emails: selArr.map((p) => p.correo) }, '✅ Invitaciones enviadas')}
+              disabled={busy}
+              className="btn-primary w-full"
+            >
+              📨 Invitar a {selArr.length}
+            </button>
+          )}
 
-          {/* Más opciones: mover / cancelar */}
-          <button onClick={() => setShowMas((v) => !v)} className="w-full text-center text-xs text-slate-500">
-            {showMas ? 'Ocultar' : 'Más opciones (mover / cancelar)'}
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setShowMover((v) => !v)}
+              className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold active:scale-95 ${
+                showMover ? 'border-accent/50 bg-accent/15 text-accent' : 'border-ink-700 bg-ink-800/60 text-slate-200'
+              }`}
+            >
+              🕐 Mover horario
+            </button>
+            <button
+              onClick={() => {
+                if (confirm('¿Cancelar este evento? Se avisará a los invitados.')) call({ action: 'cancel' }, '✅ Evento cancelado');
+              }}
+              disabled={busy}
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-urgent/40 bg-urgent/10 py-2.5 text-sm font-semibold text-urgent active:scale-95"
+            >
+              🗑️ Cancelar
+            </button>
+          </div>
 
-          {showMas && (
-            <div className="space-y-2 rounded-xl border border-ink-700 bg-ink-900/50 p-3">
-              <p className="text-[10px] uppercase tracking-wide text-slate-500">Mover horario</p>
+          {showMover && (
+            <div className="space-y-2 rounded-xl border border-accent/30 bg-ink-900/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Nuevo horario</p>
               <div className="flex items-center gap-2">
                 <input type="time" value={horaIni} onChange={(e) => setHoraIni(e.target.value)} className="flex-1 rounded-lg bg-ink-900 px-2 py-2 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand" />
                 <span className="text-slate-500">–</span>
                 <input type="time" value={horaFin} onChange={(e) => setHoraFin(e.target.value)} className="flex-1 rounded-lg bg-ink-900 px-2 py-2 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand" />
-                <button onClick={() => call({ action: 'reschedule', hora_ini: horaIni, hora_fin: horaFin }, '✅ Movido')} disabled={busy} className="btn-ghost px-3 py-2 text-sm">
-                  Mover
-                </button>
               </div>
               <button
-                onClick={() => {
-                  if (confirm('¿Cancelar este evento? Se avisará a los invitados.')) call({ action: 'cancel' }, '✅ Cancelado');
-                }}
+                onClick={() => call({ action: 'reschedule', hora_ini: horaIni, hora_fin: horaFin }, '✅ Junta movida')}
                 disabled={busy}
-                className="w-full rounded-xl border border-urgent/40 bg-urgent/10 py-2 text-sm font-medium text-urgent active:scale-[0.98]"
+                className="btn-primary w-full py-2 text-sm"
               >
-                🗑️ Cancelar evento
+                Confirmar cambio de horario
               </button>
             </div>
           )}

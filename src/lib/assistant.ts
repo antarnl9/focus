@@ -15,7 +15,8 @@ export interface ChatTurn {
 export interface PendingAction {
   tool: string;
   input: Record<string, unknown>;
-  resumen: string;
+  titulo: string; // "Mover junta"
+  detalle: string; // "“Reportes T1” → 17:00–17:30"
 }
 
 // Acciones que salen hacia afuera (mandan correo) → requieren confirmación.
@@ -119,20 +120,20 @@ const TOOLS: Anthropic.Tool[] = [
   },
 ];
 
-function resumenDe(name: string, i: Record<string, unknown>): string {
+function accionInfo(name: string, i: Record<string, unknown>): { titulo: string; detalle: string } {
   const inv = (i.invitados as string[]) ?? [];
   const emails = (i.emails as string[]) ?? [];
   switch (name) {
     case 'mover_junta':
-      return `Mover “${i.titulo || 'la junta'}” a ${i.hora_ini}–${i.hora_fin}`;
+      return { titulo: 'Mover junta', detalle: `“${i.titulo || 'la junta'}” → ${i.hora_ini}–${i.hora_fin}` };
     case 'crear_junta':
-      return `Crear “${i.titulo}” el ${i.fecha} de ${i.hora_ini} a ${i.hora_fin}${inv.length ? ` · invita a ${inv.join(', ')}` : ''}`;
+      return { titulo: 'Crear junta', detalle: `“${i.titulo}” · ${i.fecha} ${i.hora_ini}–${i.hora_fin}${inv.length ? ` · ${inv.join(', ')}` : ''}` };
     case 'invitar_a_junta':
-      return `Invitar a ${emails.join(', ')} a “${i.titulo || 'la junta'}”`;
+      return { titulo: 'Invitar', detalle: `${emails.join(', ')} → “${i.titulo || 'la junta'}”` };
     case 'cancelar_junta':
-      return `Cancelar “${i.titulo || 'la junta'}”`;
+      return { titulo: 'Cancelar junta', detalle: `“${i.titulo || 'la junta'}”` };
     default:
-      return name;
+      return { titulo: name, detalle: '' };
   }
 }
 
@@ -241,7 +242,7 @@ Reglas:
       if (block.type !== 'tool_use') continue;
       const input = (block.input ?? {}) as Record<string, unknown>;
       if (CONFIRM_TOOLS.has(block.name)) {
-        pendingActions.push({ tool: block.name, input, resumen: resumenDe(block.name, input) });
+        pendingActions.push({ tool: block.name, input, ...accionInfo(block.name, input) });
         results.push({ type: 'tool_result', tool_use_id: block.id, content: 'Propuesta registrada. El usuario la confirmará con un botón; todavía NO se ha hecho.' });
       } else {
         const out = await execTool(client, userId, block.name, input);
@@ -283,7 +284,7 @@ export async function executeAction(userId: string, action: PendingAction): Prom
     }
     if (!r.ok) return { ok: false, message: r.error || 'No se pudo completar' };
     await syncCalendar(userId).catch(() => {});
-    return { ok: true, message: `✅ ${action.resumen}` };
+    return { ok: true, message: `✅ ${action.titulo}: ${action.detalle}` };
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
