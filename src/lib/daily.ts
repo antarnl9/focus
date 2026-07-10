@@ -15,14 +15,20 @@ export async function gatherDailyData(client: SupabaseClient, userId: string, fe
       .gte('resolved_at', `${fecha}T00:00:00`),
     client.from('dudas').select('autor_nombre, decision, urgente').eq('user_id', userId).in('estado', ['pendiente', 'incompleta']),
     client.from('prioridades').select('tier, texto, done').eq('user_id', userId).order('tier'),
-    client.from('grabaciones').select('label, acuerdos').eq('user_id', userId).eq('fecha', fecha),
+    client.from('grabaciones').select('label, resumen, transcript, acuerdos').eq('user_id', userId).eq('fecha', fecha),
   ]);
 
   const acuerdos: DailyInput['acuerdos'] = [];
+  const juntas: DailyInput['juntas'] = [];
   for (const g of grabs.data ?? []) {
     for (const a of ((g.acuerdos as { acuerdo: string; responsable?: string; fecha?: string }[]) ?? [])) {
       acuerdos.push({ junta: g.label, acuerdo: a.acuerdo, responsable: a.responsable, fecha: a.fecha });
     }
+    // Prefiere el resumen IA; si no hay, usa un extracto del transcript.
+    const resumen = (g.resumen as string) || '';
+    const transcript = (g.transcript as string) || '';
+    const texto = resumen || (transcript ? transcript.slice(0, 1500) : '');
+    if (texto) juntas.push({ label: g.label as string, resumen: texto });
   }
 
   return {
@@ -32,6 +38,7 @@ export async function gatherDailyData(client: SupabaseClient, userId: string, fe
     dudasPendientes: (dudasPend.data ?? []).map((d) => ({ autor: d.autor_nombre || 'equipo', decision: d.decision || '', urgente: !!d.urgente })),
     prioridades: (prios.data ?? []).map((p) => ({ tier: p.tier, texto: p.texto, done: !!p.done })),
     acuerdos,
+    juntas,
   };
 }
 

@@ -117,6 +117,7 @@ export interface DailyInput {
   dudasPendientes: { autor: string; decision: string; urgente: boolean }[];
   prioridades: { tier: number; texto: string; done: boolean }[];
   acuerdos: { junta: string; acuerdo: string; responsable?: string; fecha?: string }[];
+  juntas: { label: string; resumen: string }[]; // resumen (o transcript) de lo grabado hoy
 }
 
 export async function composeDaily(input: DailyInput, contexto = ''): Promise<string> {
@@ -137,7 +138,7 @@ Usa EXACTAMENTE este formato (markdown de Slack, con emojis):
 
 Reglas:
 - Sé conciso, orientado a resultados. Bullets cortos.
-- "Resuelto hoy" sale de la bitácora, dudas resueltas y prioridades completadas.
+- "Resuelto hoy" sale de la bitácora, dudas resueltas, prioridades completadas y lo tratado en las juntas grabadas.
 - "En curso" de prioridades no terminadas y dudas pendientes.
 - "Mañana (top 3)": exactamente 3 bullets con lo más importante para el día siguiente (basado en P0/P1 y pendientes).
 - "Riesgos / bloqueos": dudas urgentes sin resolver, acuerdos con fecha próxima, o bloqueos evidentes. Si no hay, escribe "- Sin bloqueos identificados".
@@ -156,6 +157,9 @@ ${input.dudasPendientes.map((d) => `- ${d.urgente ? '[URGENTE] ' : ''}${d.autor}
 
 PRIORIDADES:
 ${input.prioridades.map((p) => `- P${p.tier} ${p.done ? '[hecho]' : '[pendiente]'} ${p.texto}`).join('\n') || '(ninguna)'}
+
+JUNTAS GRABADAS (resumen de lo discutido):
+${input.juntas.map((j) => `- ${j.label}: ${j.resumen}`).join('\n') || '(ninguna)'}
 
 ACUERDOS DE JUNTAS:
 ${input.acuerdos.map((a) => `- (${a.junta}) ${a.acuerdo}${a.responsable ? ` — ${a.responsable}` : ''}${a.fecha ? ` (${a.fecha})` : ''}`).join('\n') || '(ninguno)'}`;
@@ -327,7 +331,7 @@ REGLAS (críticas):
 - AYUDA = decisión clara sí/no o A vs B (máx 2). Si no hay ask real: N/A.
 - KILL = algo que se pausó/pospuso para mantener foco, o N/A.
 - MÉTRICA/SEÑAL = SIEMPRE debe existir: un número o señal corta y específica (no "todo bien", no "avanzando").
-- No inventes datos: usa la bitácora, dudas, prioridades, acuerdos y el contexto de Slack. Si algo no aplica, N/A.
+- No inventes datos: usa la bitácora, dudas, prioridades, resúmenes de juntas, acuerdos y el contexto de Slack. Si algo no aplica, N/A.
 - Solo 1–3 por sección (no siempre 3).
 Responde SOLO con el texto del brief, sin encabezados extra.`;
 
@@ -344,6 +348,9 @@ ${input.dudasPendientes.map((d) => `- ${d.urgente ? '[URGENTE] ' : ''}${d.autor}
 
 PRIORIDADES:
 ${input.prioridades.map((p) => `- P${p.tier} ${p.done ? '[hecho]' : '[pendiente]'} ${p.texto}`).join('\n') || '(ninguna)'}
+
+JUNTAS GRABADAS (resumen de lo discutido):
+${input.juntas.map((j) => `- ${j.label}: ${j.resumen}`).join('\n') || '(ninguna)'}
 
 ACUERDOS DE JUNTAS:
 ${input.acuerdos.map((a) => `- (${a.junta}) ${a.acuerdo}${a.responsable ? ` — ${a.responsable}` : ''}${a.fecha ? ` (${a.fecha})` : ''}`).join('\n') || '(ninguno)'}`;
