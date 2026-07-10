@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import type { DayBlock } from '@/lib/types';
 import { ThemeToggle } from './ThemeToggle';
 import { minutesOfDay, hmToMinutes, prettyDate, prettyTime } from '@/lib/time';
@@ -19,8 +21,16 @@ export function HeaderNow({
   pendientes: number;
   urgentes: number;
 }) {
+  const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
   const mins = minutesOfDay(now);
   const active = blocks.find((b) => mins >= hmToMinutes(b.hora_ini) && mins < hmToMinutes(b.hora_fin));
+
+  function refrescar() {
+    setRefreshing(true);
+    router.refresh(); // revalida los datos del server sin recargar la app
+    setTimeout(() => setRefreshing(false), 800);
+  }
 
   // Próxima ventana de dudas (spec §3.1: contador visible).
   const nextWindow = blocks
@@ -41,8 +51,8 @@ export function HeaderNow({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => window.location.reload()}
-            className="rounded-full border border-ink-700 px-2.5 py-1.5 text-xs text-slate-300 active:scale-95"
+            onClick={refrescar}
+            className={`rounded-full border border-ink-700 px-2.5 py-1.5 text-xs text-slate-300 active:scale-95 ${refreshing ? 'animate-spin' : ''}`}
             aria-label="Actualizar"
             title="Actualizar"
           >

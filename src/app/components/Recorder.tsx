@@ -1,22 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
-import type { DayBlock, Grabacion, Persona } from '@/lib/types';
+import type { DayBlock, Grabacion, Persona, CalendarEvent, EventAttendee } from '@/lib/types';
 import { minutesOfDay, hmToMinutes, prettyTime } from '@/lib/time';
 import { PersonaSelector } from './PersonaSelector';
+import { useRecording } from './RecordingProvider';
+import { ensurePersonasFromAttendees } from './persona-util';
 
 type Row = Grabacion & { personasIds: string[]; personasNombres: string[] };
-
-function pickMime(): string {
-  const cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac'];
-  for (const c of cands) {
-    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c)) return c;
-  }
-  return '';
-}
 
 const CUSTOM = '__custom__';
 
@@ -32,38 +26,106 @@ function mapRows(data: unknown[]): Row[] {
   });
 }
 
-export function Recorder({ initial, blocks, now }: { initial: Grabacion[]; blocks: DayBlock[]; now: Date }) {
+interface JuntaOpt {
+  key: string;
+  label: string;
+  time: string;
+  attendees: EventAttendee[];
+  blockRef: string | null;
+  isNow: boolean;
+  start: number;
+  isEvent: boolean;
+}
+
+export function Recorder({
+  initial,
+  blocks,
+  now,
+  events,
+}: {
+  initial: Grabacion[];
+  blocks: DayBlock[];
+  now: Date;
+  events: CalendarEvent[];
+}) {
   const supabase = useRef(createSupabaseBrowser()).current;
+  const rec = useRecording();
   const [items, setItems] = useState<Row[]>(initial.map((g) => ({ ...g, personasIds: [], personasNombres: [] })));
   const [personas, setPersonas] = useState<Persona[]>([]);
-  const [recording, setRecording] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [canRecord, setCanRecord] = useState(true);
-  const [busy, setBusy] = useState(false);
-
-  const [juntaSel, setJuntaSel] = useState<string>(CUSTOM);
+  const [selKey, setSelKey] = useState<string>('');
   const [customLabel, setCustomLabel] = useState('');
   const [selPersonas, setSelPersonas] = useState<string[]>([]);
+  const [switching, setSwitching] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const userSetRef = useRef(false);
+  const wasRecording = useRef(false);
 
-  const mediaRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const startRef = useRef<number>(0);
-  const rowIdRef = useRef<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mins = minutesOfDay(now);
+
+  // Juntas de hoy: eventos reales de Google (con invitados) + bloques de la plantilla.
+  const options = useMemo<JuntaOpt[]>(() => {
+    const evs: JuntaOpt[] = events.map((e) => {
+      const s = minutesOfDay(new Date(e.start));
+      const en = minutesOfDay(new Date(e.end));
+      return {
+        key: `ev:${e.id}`,
+        label: e.summary,
+        time: `${fmtMin(s)}–${fmtMin(en)}`,
+        attendees: e.attendees ?? [],
+        blockRef: null,
+        isNow: mins >= s && mins < en,
+        start: s,
+        isEvent: true,
+      };
+    });
+    const bls: JuntaOpt[] = blocks.map((b) => {
+      const s = hmToMinutes(b.hora_ini);
+      const en = hmToMinutes(b.hora_fin);
+      return {
+        key: `bl:${b.id}`,
+        label: b.label,
+        time: `${prettyTime(b.hora_ini)}–${prettyTime(b.hora_fin)}`,
+        attendees: [],
+        blockRef: b.id,
+        isNow: mins >= s && mins < en,
+        start: s,
+        isEvent: false,
+      };
+    });
+    return [...evs, ...bls].sort((a, b) => a.start - b.start);
+  }, [events, blocks, mins]);
+
+  const selected = options.find((o) => o.key === selKey) ?? null;
+  const isCustom = selKey === CUSTOM;
 
   useEffect(() => {
-    setCanRecord(typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices);
     fetchPersonas();
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Default: la junta que está pasando AHORA (evento primero), con sus invitados.
   useEffect(() => {
-    if (recording || juntaSel !== CUSTOM || customLabel) return;
-    const mins = minutesOfDay(now);
-    const active = blocks.find((b) => mins >= hmToMinutes(b.hora_ini) && mins < hmToMinutes(b.hora_fin));
-    if (active) setJuntaSel(active.id);
-  }, [now, blocks, recording, juntaSel, customLabel]);
+    if (rec.recording || userSetRef.current || !options.length) return;
+    const pick =
+      options.find((o) => o.isNow && o.isEvent) ??
+      options.find((o) => o.isNow) ??
+      options.find((o) => o.isEvent) ??
+      options[0];
+    if (pick && pick.key !== selKey) applySelect(pick.key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options, rec.recording]);
+
+  // Refresca la lista cuando termina una grabación (o hay algo en proceso).
+  useEffect(() => {
+    const was = wasRecording.current;
+    wasRecording.current = rec.recording;
+    if (was && !rec.recording) {
+      const t = setTimeout(refresh, 1500);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rec.recording]);
 
   useEffect(() => {
     const anyProcessing = items.some((g) => ['subida', 'transcribiendo', 'procesando'].includes(g.estado));
@@ -87,122 +149,86 @@ export function Recorder({ initial, blocks, now }: { initial: Grabacion[]; block
     if (data) setItems(mapRows(data));
   }
 
-  function currentLabelAndRef(): { label: string; block_ref: string | null } {
-    if (juntaSel === CUSTOM) return { label: customLabel.trim() || 'Junta sin nombre', block_ref: null };
-    const b = blocks.find((x) => x.id === juntaSel);
-    return { label: b?.label ?? 'Junta', block_ref: b?.id ?? null };
-  }
-
-  async function linkPersonas(grabacionId: string, uid: string, ids: string[]) {
-    if (!ids.length) return;
-    await supabase.from('grabacion_personas').insert(ids.map((pid) => ({ grabacion_id: grabacionId, persona_id: pid, user_id: uid })));
-  }
-
-  async function start() {
-    if (recording) return;
-    setBusy(true);
-    try {
+  // Selecciona una junta y, si es un evento con invitados, los deja listos como personas.
+  async function applySelect(key: string) {
+    setSelKey(key);
+    setSwitching(false);
+    const opt = options.find((o) => o.key === key);
+    if (opt && opt.attendees.length) {
       const uid = (await supabase.auth.getUser()).data.user?.id;
-      if (!uid) throw new Error('no auth');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = pickMime();
-      const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
-      mr.onstop = () => finalize(uid, mime);
-
-      const { label, block_ref } = currentLabelAndRef();
-      const { data } = await supabase
-        .from('grabaciones')
-        .insert({ user_id: uid, label, block_ref, estado: 'grabando' })
-        .select()
-        .single();
-      const id = (data as Grabacion)?.id ?? null;
-      rowIdRef.current = id;
-      if (id) await linkPersonas(id, uid, selPersonas);
-
-      mediaRef.current = mr;
-      startRef.current = Date.now();
-      mr.start();
-      setRecording(true);
-      setElapsed(0);
-      timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000);
-    } catch {
-      alert('No se pudo acceder al micrófono. Otorga permiso o usa "Subir audio".');
-    } finally {
-      setBusy(false);
+      if (uid) {
+        const ids = await ensurePersonasFromAttendees(supabase, uid, opt.attendees);
+        setSelPersonas(ids);
+        fetchPersonas();
+      }
+    } else {
+      setSelPersonas([]);
     }
   }
 
-  function stop() {
-    if (!recording) return;
-    mediaRef.current?.stop();
-    mediaRef.current?.stream.getTracks().forEach((t) => t.stop());
-    if (timerRef.current) clearInterval(timerRef.current);
-    setRecording(false);
+  function chooseJunta(key: string) {
+    userSetRef.current = true;
+    if (key === CUSTOM) {
+      setSelKey(CUSTOM);
+      setSwitching(false);
+      setSelPersonas([]);
+    } else {
+      applySelect(key);
+    }
   }
 
-  async function finalize(uid: string, mime: string) {
-    const id = rowIdRef.current;
-    if (!id) return;
-    const blob = new Blob(chunksRef.current, { type: mime || 'audio/webm' });
-    const dur = Math.floor((Date.now() - startRef.current) / 1000);
-    const ext = mime.includes('mp4') || mime.includes('aac') ? 'm4a' : 'webm';
-    const path = `${uid}/${id}.${ext}`;
-    setBusy(true);
-    const { error } = await supabase.storage.from('grabaciones').upload(path, blob, { contentType: blob.type, upsert: true });
-    if (error) {
-      alert('Falló la subida del audio.');
-      setBusy(false);
-      return;
-    }
-    await fetch('/api/recordings/finalize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, audio_path: path, duracion_seg: dur, mimetype: blob.type }),
-    });
-    setCustomLabel('');
-    setSelPersonas([]);
-    setBusy(false);
-    refresh();
+  function currentSel(): { label: string; blockRef: string | null; attendees: EventAttendee[] } {
+    if (isCustom) return { label: customLabel.trim() || 'Junta sin nombre', blockRef: null, attendees: [] };
+    if (selected) return { label: selected.label, blockRef: selected.blockRef, attendees: selected.attendees };
+    return { label: 'Junta', blockRef: null, attendees: [] };
+  }
+
+  function grabar() {
+    const { label, blockRef, attendees } = currentSel();
+    rec.start({ label, blockRef, attendees, personaIds: selPersonas });
   }
 
   async function uploadFile(file: File) {
-    setBusy(true);
-    const uid = (await supabase.auth.getUser()).data.user?.id;
-    if (!uid) return;
-    const { label, block_ref } = currentLabelAndRef();
-    const { data } = await supabase
-      .from('grabaciones')
-      .insert({
-        user_id: uid,
-        label: label !== 'Junta sin nombre' ? label : file.name.replace(/\.[^.]+$/, ''),
-        block_ref,
-        estado: 'grabando',
-      })
-      .select()
-      .single();
-    const id = (data as Grabacion)?.id;
-    if (!id) return;
-    await linkPersonas(id, uid, selPersonas);
-    const ext = file.name.split('.').pop() || 'm4a';
-    const path = `${uid}/${id}.${ext}`;
-    const { error } = await supabase.storage.from('grabaciones').upload(path, file, { contentType: file.type, upsert: true });
-    if (error) {
-      alert('Falló la subida.');
-      setBusy(false);
-      return;
+    setUploading(true);
+    try {
+      const uid = (await supabase.auth.getUser()).data.user?.id;
+      if (!uid) return;
+      const { label, blockRef, attendees } = currentSel();
+      const { data } = await supabase
+        .from('grabaciones')
+        .insert({
+          user_id: uid,
+          label: label !== 'Junta sin nombre' ? label : file.name.replace(/\.[^.]+$/, ''),
+          block_ref: blockRef,
+          estado: 'grabando',
+        })
+        .select()
+        .single();
+      const id = (data as Grabacion)?.id;
+      if (!id) return;
+      const attIds = await ensurePersonasFromAttendees(supabase, uid, attendees);
+      const ids = [...new Set([...selPersonas, ...attIds])];
+      if (ids.length) await supabase.from('grabacion_personas').insert(ids.map((pid) => ({ grabacion_id: id, persona_id: pid, user_id: uid })));
+      const ext = file.name.split('.').pop() || 'm4a';
+      const path = `${uid}/${id}.${ext}`;
+      const { error } = await supabase.storage.from('grabaciones').upload(path, file, { contentType: file.type, upsert: true });
+      if (error) {
+        alert('Falló la subida.');
+        return;
+      }
+      await fetch('/api/recordings/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, audio_path: path, duracion_seg: 0, mimetype: file.type }),
+      });
+      setCustomLabel('');
+      refresh();
+    } finally {
+      setUploading(false);
     }
-    await fetch('/api/recordings/finalize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, audio_path: path, duracion_seg: 0, mimetype: file.type }),
-    });
-    setCustomLabel('');
-    setSelPersonas([]);
-    setBusy(false);
-    refresh();
   }
+
+  const invitadosNombres = personas.filter((p) => selPersonas.includes(p.id)).map((p) => p.nombre);
 
   return (
     <section className="space-y-5">
@@ -214,65 +240,107 @@ export function Recorder({ initial, blocks, now }: { initial: Grabacion[]; block
       </div>
 
       <div className="card space-y-3 p-4">
+        {/* ¿Qué grabas? */}
         <div>
-          <label className="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">Junta</label>
-          <select
-            value={juntaSel}
-            onChange={(e) => setJuntaSel(e.target.value)}
-            disabled={recording}
-            className="w-full rounded-lg bg-ink-900 px-3 py-2 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand disabled:opacity-60"
-          >
-            {blocks.map((b) => (
-              <option key={b.id} value={b.id}>
-                {prettyTime(b.hora_ini)} · {b.label}
-              </option>
-            ))}
-            <option value={CUSTOM}>✏️ Otra junta…</option>
-          </select>
+          <label className="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">¿Qué estás grabando?</label>
+          {!switching ? (
+            <button
+              onClick={() => setSwitching(true)}
+              disabled={rec.recording}
+              className="flex w-full items-center gap-2 rounded-lg bg-ink-900 px-3 py-2.5 text-left ring-1 ring-ink-700 active:scale-[0.99] disabled:opacity-60"
+            >
+              <span className="text-lg">{isCustom || !selected?.isEvent ? '🗓️' : '📅'}</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-100">
+                  {isCustom ? customLabel.trim() || 'Otra junta…' : selected?.label ?? 'Elige una junta'}
+                </p>
+                {selected && <p className="text-[11px] text-slate-500">{selected.time}</p>}
+              </div>
+              {selected?.isNow && <span className="chip bg-brand text-white">ahora</span>}
+              <span className="text-xs text-slate-500">Cambiar ›</span>
+            </button>
+          ) : (
+            <div className="space-y-1 rounded-lg bg-ink-900 p-1 ring-1 ring-ink-700">
+              {options.length === 0 && <p className="p-3 text-center text-xs text-slate-500">Sin juntas hoy. Usa “Otra junta…”.</p>}
+              {options.map((o) => (
+                <button
+                  key={o.key}
+                  onClick={() => chooseJunta(o.key)}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left active:bg-ink-800"
+                >
+                  <span>{o.isEvent ? '📅' : '🗓️'}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-slate-100">{o.label}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {o.time}
+                      {o.attendees.length ? ` · ${o.attendees.length} invitado${o.attendees.length > 1 ? 's' : ''}` : ''}
+                    </p>
+                  </div>
+                  {o.isNow && <span className="chip bg-brand text-white">ahora</span>}
+                </button>
+              ))}
+              <button onClick={() => chooseJunta(CUSTOM)} className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-300 active:bg-ink-800">
+                ✏️ Otra junta…
+              </button>
+            </div>
+          )}
         </div>
 
-        {juntaSel === CUSTOM && (
+        {isCustom && (
           <input
             value={customLabel}
             onChange={(e) => setCustomLabel(e.target.value)}
-            disabled={recording}
+            disabled={rec.recording}
             placeholder="Nombre de la junta"
             className="w-full rounded-lg bg-ink-900 px-3 py-2 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand disabled:opacity-60"
           />
         )}
 
+        {/* Personas */}
         <div>
-          <label className="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">¿Con quién? (personas)</label>
+          <label className="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">¿Con quién?</label>
+          {selected?.isEvent && selected.attendees.length > 0 && (
+            <p className="mb-1 text-[11px] text-slate-500">
+              Invitados del evento, ya seleccionados{invitadosNombres.length ? `: ${invitadosNombres.join(', ')}` : ''}. Ajusta si quieres.
+            </p>
+          )}
           <PersonaSelector
             personas={personas}
             selectedIds={selPersonas}
             onChange={setSelPersonas}
             onPersonasChange={setPersonas}
             supabase={supabase}
-            disabled={recording}
+            disabled={rec.recording}
           />
         </div>
 
+        {/* Grabar / detener */}
         <div className="flex items-center gap-3">
-          {!recording ? (
-            <button onClick={start} disabled={busy || !canRecord} className="btn-primary flex-1">
+          {!rec.recording ? (
+            <button onClick={grabar} disabled={rec.busy || uploading || !rec.canRecord} className="btn-primary flex-1">
               ⏺ Grabar
             </button>
           ) : (
-            <button onClick={stop} className="btn flex-1 animate-pulseRing bg-urgent text-white">
-              ⏹ Detener · {fmtDur(elapsed)}
+            <button onClick={rec.stop} className="btn flex-1 animate-pulseRing bg-urgent text-white">
+              ⏹ Detener · {fmtDur(rec.elapsed)}
             </button>
           )}
           <label className="btn-ghost cursor-pointer" title="Subir audio del teléfono">
-            📁
-            <input type="file" accept="audio/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} />
+            {uploading ? '⏳' : '📁'}
+            <input
+              type="file"
+              accept="audio/*"
+              className="hidden"
+              disabled={rec.recording || uploading}
+              onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
+            />
           </label>
         </div>
 
-        {!canRecord && (
+        {!rec.canRecord && (
           <p className="text-xs text-warn">Tu navegador no permite grabar aquí. Usa 📁 para subir un audio del teléfono.</p>
         )}
-        <p className="text-center text-[11px] text-slate-600">Aviso: al iniciar, informa que la junta se graba.</p>
+        <p className="text-center text-[11px] text-slate-600">Al iniciar, avisa que la junta se graba. La pantalla se mantiene encendida.</p>
       </div>
 
       <div className="space-y-2">
@@ -457,6 +525,12 @@ function GrabacionCard({
       )}
     </div>
   );
+}
+
+function fmtMin(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return prettyTime(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
 }
 
 function fmtDur(s: number): string {

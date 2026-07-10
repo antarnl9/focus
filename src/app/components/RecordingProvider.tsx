@@ -2,13 +2,14 @@
 
 import { createContext, useContext, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
-import type { Grabacion } from '@/lib/types';
+import type { Grabacion, EventAttendee } from '@/lib/types';
+import { ensurePersonasFromAttendees } from './persona-util';
 
 interface StartArgs {
   label: string;
   blockRef?: string | null;
   personaIds?: string[];
-  attendeeEmails?: string[]; // se casan con personas por correo
+  attendees?: EventAttendee[]; // invitados del evento; se crean/casan como personas
 }
 
 interface RecordingCtx {
@@ -87,18 +88,13 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [recording, acquireWake]);
 
-  async function resolvePersonaIds(personaIds: string[], attendeeEmails: string[]): Promise<string[]> {
-    const set = new Set(personaIds);
-    const emails = attendeeEmails.map((e) => e.toLowerCase()).filter(Boolean);
-    if (emails.length) {
-      const { data } = await supabase.from('personas').select('id, correo').in('correo', emails);
-      for (const p of (data ?? []) as { id: string; correo: string | null }[]) set.add(p.id);
-    }
-    return [...set];
+  async function resolvePersonaIds(uid: string, personaIds: string[], attendees: EventAttendee[]): Promise<string[]> {
+    const fromAttendees = await ensurePersonasFromAttendees(supabase, uid, attendees);
+    return [...new Set([...personaIds, ...fromAttendees])];
   }
 
   const start = useCallback(
-    async ({ label: lbl, blockRef = null, personaIds = [], attendeeEmails = [] }: StartArgs) => {
+    async ({ label: lbl, blockRef = null, personaIds = [], attendees = [] }: StartArgs) => {
       if (recording || busy) return;
       setBusy(true);
       try {
@@ -120,7 +116,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         const id = (data as Grabacion)?.id ?? null;
         rowIdRef.current = id;
 
-        const ids = await resolvePersonaIds(personaIds, attendeeEmails);
+        const ids = await resolvePersonaIds(uid, personaIds, attendees);
         if (id && ids.length) {
           await supabase.from('grabacion_personas').insert(ids.map((pid) => ({ grabacion_id: id, persona_id: pid, user_id: uid })));
         }

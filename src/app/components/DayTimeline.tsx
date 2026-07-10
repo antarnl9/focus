@@ -45,7 +45,7 @@ export function DayTimeline({
 
   function grabarItem(it: Item) {
     if (it.kind === 'event' && it.event) {
-      rec.start({ label: it.event.summary, attendeeEmails: (it.event.attendees ?? []).map((a) => a.email) });
+      rec.start({ label: it.event.summary, attendees: it.event.attendees ?? [] });
     } else if (it.kind === 'block' && it.block) {
       rec.start({ label: it.block.label, blockRef: it.block.id });
     }

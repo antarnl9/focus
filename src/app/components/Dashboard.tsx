@@ -1,22 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
 import { localParts } from '@/lib/time';
 import { blockAppliesOn } from '@/lib/defaults';
 import type { DayBlock, Duda, Prioridad, BitacoraEntry, Grabacion, Daily, CalendarEvent } from '@/lib/types';
 import { HeaderNow } from './HeaderNow';
 import { DayTimeline } from './DayTimeline';
-import { DudasList } from './DudasList';
 import { Prioridades } from './Prioridades';
-import { Bitacora } from './Bitacora';
-import { Recorder } from './Recorder';
-import { DailyPanel } from './DailyPanel';
 import { BottomNav, type Tab } from './BottomNav';
 import { InstallPrompt } from './InstallPrompt';
-import { DudaEnPersona } from './DudaEnPersona';
-import { SlackContextView } from './SlackContextView';
 import { RecordingProvider } from './RecordingProvider';
+
+// Tabs que no son "Hoy": se cargan solo al abrirse (menos JS en el arranque).
+const DudasList = dynamic(() => import('./DudasList').then((m) => m.DudasList), { ssr: false });
+const Bitacora = dynamic(() => import('./Bitacora').then((m) => m.Bitacora), { ssr: false });
+const Recorder = dynamic(() => import('./Recorder').then((m) => m.Recorder), { ssr: false });
+const DailyPanel = dynamic(() => import('./DailyPanel').then((m) => m.DailyPanel), { ssr: false });
+const DudaEnPersona = dynamic(() => import('./DudaEnPersona').then((m) => m.DudaEnPersona), { ssr: false });
+const SlackContextView = dynamic(() => import('./SlackContextView').then((m) => m.SlackContextView), { ssr: false });
 
 interface Props {
   nombre: string;
@@ -47,9 +50,9 @@ export function Dashboard(props: Props) {
   const onBlockSaved = useCallback((b: DayBlock) => setBlocks((prev) => prev.map((x) => (x.id === b.id ? b : x))), []);
   const onBlockDeleted = useCallback((id: string) => setBlocks((prev) => prev.filter((x) => x.id !== id)), []);
 
-  // Reloj: actualiza "ahora" y el contador cada 20 s.
+  // Reloj: actualiza "ahora" cada minuto (el "ahora" real solo cambia de minuto).
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 20_000);
+    const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
 
@@ -80,21 +83,26 @@ export function Dashboard(props: Props) {
     }
   }, [supabase, props.today]);
 
-  // Sincroniza Google → espejo al abrir, al volver a la app y cada 60 s.
+  // Sincroniza Google → espejo. La foto ya vino por SSR; aquí solo refrescamos
+  // al volver a la app y cada 5 min, con debounce (no re-sincronizar si <2 min).
+  const lastSyncRef = useRef(0);
   useEffect(() => {
     let alive = true;
-    const sync = () => {
+    const sync = (force = false) => {
       if (document.visibilityState !== 'visible') return;
+      const nowMs = Date.now();
+      if (!force && nowMs - lastSyncRef.current < 120_000) return;
+      lastSyncRef.current = nowMs;
       fetch('/api/calendar/sync', { method: 'POST' })
         .then(() => {
           if (alive) refetchEvents();
         })
         .catch(() => {});
     };
-    sync();
+    sync(true);
     const onVis = () => document.visibilityState === 'visible' && sync();
     document.addEventListener('visibilitychange', onVis);
-    const t = setInterval(sync, 60_000);
+    const t = setInterval(() => sync(), 300_000);
     return () => {
       alive = false;
       document.removeEventListener('visibilitychange', onVis);
@@ -103,12 +111,19 @@ export function Dashboard(props: Props) {
   }, [refetchEvents]);
 
   // Realtime: cambios del espejo (incluye el push de Google) llegan sin refrescar.
+  // Debounce para colapsar la ráfaga de upserts de un mismo sync en un refetch.
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const debounced = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(refetchEvents, 800);
+    };
     const channel = supabase
       .channel('eventos-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos' }, () => refetchEvents())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos' }, debounced)
       .subscribe();
     return () => {
+      if (timer) clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, [supabase, refetchEvents]);
@@ -179,7 +194,7 @@ export function Dashboard(props: Props) {
           <Bitacora supabase={supabase} today={props.today} entries={bitacora} onChanged={refetchBitacora} />
         )}
 
-        {tab === 'juntas' && <Recorder initial={props.initialGrabaciones} blocks={todayBlocks} now={now} />}
+        {tab === 'juntas' && <Recorder initial={props.initialGrabaciones} blocks={todayBlocks} now={now} events={events} />}
 
         {tab === 'slack' && (
           <section>
