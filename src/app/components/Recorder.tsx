@@ -381,6 +381,26 @@ function GrabacionCard({
   const [blockRef, setBlockRef] = useState<string>(g.block_ref ?? CUSTOM);
   const [sel, setSel] = useState<string[]>(g.personasIds);
   const [busy, setBusy] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+
+  async function transcribir() {
+    setTranscribing(true);
+    const res = await fetch('/api/recordings/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: g.id }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error || 'No se pudo transcribir.');
+      setTranscribing(false);
+      return;
+    }
+    setTimeout(() => {
+      setTranscribing(false);
+      onChanged();
+    }, 2500);
+  }
 
   const estadoMeta: Record<Grabacion['estado'], { label: string; tone: string }> = {
     grabando: { label: 'Grabando…', tone: 'bg-urgent/20 text-urgent' },
@@ -522,10 +542,14 @@ function GrabacionCard({
             </div>
           )}
 
-          {g.estado === 'lista' && !g.resumen && (
-            <p className="mt-3 text-[11px] text-slate-600">
-              Audio guardado. La transcripción y el resumen automáticos requieren Deepgram + el worker.
-            </p>
+          {(g.estado === 'lista' || g.estado === 'error') && !g.resumen && g.audio_path && (
+            <button
+              onClick={transcribir}
+              disabled={transcribing}
+              className="mt-3 w-full rounded-xl border border-ink-700 bg-ink-800/60 py-2 text-sm font-medium text-slate-200 active:scale-[0.98] disabled:opacity-60"
+            >
+              {transcribing ? 'Transcribiendo…' : '🎙️ Transcribir y resumir'}
+            </button>
           )}
         </div>
       )}
