@@ -25,7 +25,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="rounded-full border border-ink-700 px-2.5 py-1.5 text-xs text-slate-300 active:scale-95"
+      className="grid h-9 w-9 place-items-center rounded-full border border-ink-700 text-base text-slate-300 active:scale-90"
       aria-label="Cambiar tema"
       title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
     >

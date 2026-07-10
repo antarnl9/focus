@@ -97,6 +97,7 @@ export function Recorder({
 
   const selected = options.find((o) => o.key === selKey) ?? null;
   const isCustom = selKey === CUSTOM;
+  const nowCount = options.filter((o) => o.isNow).length;
 
   useEffect(() => {
     fetchPersonas();
@@ -283,6 +284,11 @@ export function Recorder({
                 ✏️ Otra junta…
               </button>
             </div>
+          )}
+          {!switching && nowCount > 1 && (
+            <p className="mt-1.5 text-[11px] text-warn">
+              ⚠️ Tienes {nowCount} juntas empalmadas ahora. Toca arriba para elegir en cuál estás.
+            </p>
           )}
         </div>
 

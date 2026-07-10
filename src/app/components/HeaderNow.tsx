@@ -52,7 +52,7 @@ export function HeaderNow({
         <div className="flex items-center gap-2">
           <button
             onClick={refrescar}
-            className={`rounded-full border border-ink-700 px-2.5 py-1.5 text-xs text-slate-300 active:scale-95 ${refreshing ? 'animate-spin' : ''}`}
+            className={`grid h-9 w-9 place-items-center rounded-full border border-ink-700 text-base text-slate-300 active:scale-90 ${refreshing ? 'animate-spin' : ''}`}
             aria-label="Actualizar"
             title="Actualizar"
           >
@@ -61,14 +61,16 @@ export function HeaderNow({
           <ThemeToggle />
           <Link
             href="/metricas"
-            className="rounded-full border border-ink-700 px-3 py-1.5 text-xs text-slate-300 active:scale-95"
+            aria-label="Métricas y coach"
+            title="Métricas"
+            className="grid h-9 w-9 place-items-center rounded-full border border-ink-700 text-base text-slate-300 active:scale-90"
           >
-            Métricas
+            📊
           </Link>
           <Link
             href="/ajustes"
-            aria-label="Ajustes y perfil"
-            className="grid h-8 w-8 place-items-center rounded-full bg-brand-deep/30 text-xs font-bold text-brand-soft active:scale-95"
+            aria-label="Perfil y ajustes"
+            className="ml-0.5 grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-brand to-brand-deep text-sm font-bold text-white shadow-pop ring-2 ring-brand/30 active:scale-90"
           >
             {nombre.slice(0, 2).toUpperCase()}
           </Link>
