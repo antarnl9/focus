@@ -50,6 +50,15 @@ export function isFocusEvent(e: { summary?: string | null; extendedProperties?: 
   return e.extendedProperties?.private?.focus === '1' || (e.summary ?? '').startsWith('[Focus]');
 }
 
+// Regla de recurrencia semanal según los días del bloque (0=dom..6=sáb).
+// Vacío/nulo = lun-vie (default de trabajo).
+const BYDAY = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+function rruleFor(dias?: number[] | null): string {
+  const src = dias && dias.length ? dias : [1, 2, 3, 4, 5];
+  const days = src.map((d) => BYDAY[d]).filter(Boolean);
+  return `RRULE:FREQ=WEEKLY;BYDAY=${days.join(',')}`;
+}
+
 // Guarda los tokens del provider Google (del login OAuth) cifrados.
 export async function saveGoogleTokens(userId: string, accessToken?: string | null, refreshToken?: string | null, expiresIn?: number) {
   const admin = createSupabaseAdmin();
@@ -231,6 +240,35 @@ export async function rescheduleEvent(userId: string, eventId: string, horaIni: 
   }
 }
 
+// Actualiza el evento recurrente de un bloque de la plantilla: horario, nombre
+// y días de recurrencia (para que Google respete los días específicos).
+export async function updateBlockEvent(
+  userId: string,
+  eventId: string,
+  p: { summary: string; horaIni: string; horaFin: string; dias?: number[] | null }
+): Promise<{ ok: boolean; error?: string }> {
+  const cal = await getCalendarClient(userId);
+  if (!cal) return { ok: false, error: 'Calendar no conectado' };
+  try {
+    const ev = await cal.events.get({ calendarId: env.googleCalendarId, eventId });
+    const fecha = (ev.data.start?.dateTime ?? '').slice(0, 10) || localDateStr();
+    await cal.events.patch({
+      calendarId: env.googleCalendarId,
+      eventId,
+      requestBody: {
+        summary: p.summary,
+        start: { dateTime: `${fecha}T${p.horaIni}:00`, timeZone: TZ },
+        end: { dateTime: `${fecha}T${p.horaFin}:00`, timeZone: TZ },
+        recurrence: [rruleFor(p.dias)],
+      },
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('[google] updateBlockEvent', err);
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
 // Cancela (elimina) un evento y avisa a los invitados.
 export async function cancelEvent(userId: string, eventId: string): Promise<{ ok: boolean; error?: string }> {
   const cal = await getCalendarClient(userId);
@@ -283,7 +321,7 @@ export async function cleanupFocusEvents(userId: string): Promise<{ ok: boolean;
 // Bloques 'protegido' y 'comida' como ocupado (opaque); 'dudas' con descripción.
 export async function writeTemplateToCalendar(
   userId: string,
-  blocks: { id: string; hora_ini: string; hora_fin: string; label: string; tipo: string }[]
+  blocks: { id: string; hora_ini: string; hora_fin: string; label: string; tipo: string; dias?: number[] | null }[]
 ): Promise<{ ok: boolean; created: number; error?: string }> {
   const cal = await getCalendarClient(userId);
   if (!cal) return { ok: false, created: 0, error: 'Calendar no conectado' };
@@ -309,7 +347,7 @@ export async function writeTemplateToCalendar(
           description: desc || undefined,
           start: { dateTime: `${today}T${b.hora_ini}:00`, timeZone: TZ },
           end: { dateTime: `${today}T${b.hora_fin}:00`, timeZone: TZ },
-          recurrence: ['RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR'],
+          recurrence: [rruleFor(b.dias)],
           transparency: busy ? 'opaque' : 'transparent',
           visibility: b.tipo === 'dudas' ? 'public' : 'default',
           extendedProperties: { private: { focus: '1' } }, // etiqueta interna

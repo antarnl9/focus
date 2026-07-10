@@ -56,10 +56,20 @@ export function BlockSheet({
 
   async function save() {
     setBusy(true);
-    const patch = { label: label.trim(), hora_ini: horaIni, hora_fin: horaFin, tipo, dias: dias.length ? dias : null };
+    const dval = dias.length ? dias : null;
+    const patch = { label: label.trim(), hora_ini: horaIni, hora_fin: horaFin, tipo, dias: dval };
     await supabase.from('day_blocks').update(patch).eq('id', block.id);
+    // Si el bloque ya está en Google Calendar, actualiza el evento recurrente
+    // (horario, nombre y días) para que Google respete los días específicos.
+    if (block.gcal_event_id) {
+      await fetch('/api/calendar/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: block.gcal_event_id, summary: patch.label, hora_ini: horaIni, hora_fin: horaFin, dias: dval }),
+      }).catch(() => {});
+    }
     setBusy(false);
-    onSaved({ ...block, ...patch, dias: dias.length ? dias : null });
+    onSaved({ ...block, ...patch, dias: dval });
     onClose();
   }
 

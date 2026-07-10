@@ -11,7 +11,7 @@ export async function POST() {
 
   const { data: blocks } = await supabase
     .from('day_blocks')
-    .select('id, hora_ini, hora_fin, label, tipo, gcal_event_id')
+    .select('id, hora_ini, hora_fin, label, tipo, dias, gcal_event_id')
     .eq('user_id', user.id)
     .order('orden');
 

@@ -12,6 +12,7 @@ import { Prioridades } from './Prioridades';
 import { BottomNav, type Tab } from './BottomNav';
 import { InstallPrompt } from './InstallPrompt';
 import { RecordingProvider } from './RecordingProvider';
+import { AssistantFab } from './AssistantFab';
 
 // Tabs que no son "Hoy": se cargan solo al abrirse (menos JS en el arranque).
 const DudasList = dynamic(() => import('./DudasList').then((m) => m.DudasList), { ssr: false });
@@ -208,6 +209,7 @@ export function Dashboard(props: Props) {
 
       <BottomNav tab={tab} setTab={setTab} pendientes={pendientes} urgentes={urgentes} />
       <InstallPrompt />
+      <AssistantFab />
     </div>
     </RecordingProvider>
   );
