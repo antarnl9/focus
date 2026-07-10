@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { ensureUserBootstrap } from '@/lib/bootstrap';
-import { listTodayEvents } from '@/lib/google';
+import { getTodayEventsFromDb } from '@/lib/calendar';
 import { localDateStr } from '@/lib/time';
 import { Dashboard } from '@/app/components/Dashboard';
 import type { DayBlock, Duda, Prioridad, BitacoraEntry, Grabacion, Daily, CalendarEvent } from '@/lib/types';
@@ -34,7 +34,7 @@ export default async function Home() {
     supabase.from('bitacora').select('*').eq('user_id', user.id).eq('fecha', today).order('created_at'),
     supabase.from('grabaciones').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
     supabase.from('dailies').select('*').eq('user_id', user.id).eq('fecha', today).eq('tipo', 'ceo').maybeSingle(),
-    listTodayEvents(user.id).catch(() => [] as CalendarEvent[]),
+    getTodayEventsFromDb(supabase, user.id, today).catch(() => [] as CalendarEvent[]),
   ]);
 
   const nombre = (user.user_metadata?.full_name as string) || user.email || 'COO';

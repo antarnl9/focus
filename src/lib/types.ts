@@ -125,6 +125,12 @@ export interface Daily {
   slack_ts: string | null;
 }
 
+export interface EventAttendee {
+  email: string;
+  nombre: string;
+  respuesta?: string; // accepted | declined | tentative | needsAction
+}
+
 export interface CalendarEvent {
   id: string;
   summary: string;
@@ -132,4 +138,6 @@ export interface CalendarEvent {
   end: string;   // ISO
   htmlLink?: string;
   status?: string;
+  allDay?: boolean;
+  attendees?: EventAttendee[];
 }

@@ -16,6 +16,7 @@ import { BottomNav, type Tab } from './BottomNav';
 import { InstallPrompt } from './InstallPrompt';
 import { DudaEnPersona } from './DudaEnPersona';
 import { SlackContextView } from './SlackContextView';
+import { RecordingProvider } from './RecordingProvider';
 
 interface Props {
   nombre: string;
@@ -37,6 +38,7 @@ export function Dashboard(props: Props) {
   const [dudas, setDudas] = useState<Duda[]>(props.initialDudas);
   const [bitacora, setBitacora] = useState<BitacoraEntry[]>(props.initialBitacora);
   const [blocks, setBlocks] = useState<DayBlock[]>(props.initialBlocks);
+  const [events, setEvents] = useState<CalendarEvent[]>(props.calendarEvents);
 
   // Bloques que aplican HOY (según su día de la semana).
   const weekday = localParts(now).weekday;
@@ -50,6 +52,66 @@ export function Dashboard(props: Props) {
     const t = setInterval(() => setNow(new Date()), 20_000);
     return () => clearInterval(t);
   }, []);
+
+  // Lee el espejo de eventos de HOY desde la base (rápido).
+  const refetchEvents = useCallback(async () => {
+    const start = new Date(`${props.today}T00:00:00`).toISOString();
+    const end = new Date(`${props.today}T23:59:59`).toISOString();
+    const { data } = await supabase
+      .from('eventos')
+      .select('gcal_id, summary, inicio, fin, all_day, html_link, status, attendees')
+      .eq('es_focus', false)
+      .gte('inicio', start)
+      .lte('inicio', end)
+      .order('inicio');
+    if (data) {
+      setEvents(
+        data.map((r) => ({
+          id: r.gcal_id as string,
+          summary: (r.summary as string) ?? '(sin título)',
+          start: (r.inicio as string) ?? start,
+          end: (r.fin as string) ?? (r.inicio as string) ?? end,
+          htmlLink: (r.html_link as string) ?? undefined,
+          status: (r.status as string) ?? undefined,
+          allDay: (r.all_day as boolean) ?? false,
+          attendees: (r.attendees as CalendarEvent['attendees']) ?? [],
+        }))
+      );
+    }
+  }, [supabase, props.today]);
+
+  // Sincroniza Google → espejo al abrir, al volver a la app y cada 60 s.
+  useEffect(() => {
+    let alive = true;
+    const sync = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetch('/api/calendar/sync', { method: 'POST' })
+        .then(() => {
+          if (alive) refetchEvents();
+        })
+        .catch(() => {});
+    };
+    sync();
+    const onVis = () => document.visibilityState === 'visible' && sync();
+    document.addEventListener('visibilitychange', onVis);
+    const t = setInterval(sync, 60_000);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', onVis);
+      clearInterval(t);
+    };
+  }, [refetchEvents]);
+
+  // Realtime: cambios del espejo (incluye el push de Google) llegan sin refrescar.
+  useEffect(() => {
+    const channel = supabase
+      .channel('eventos-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos' }, () => refetchEvents())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, refetchEvents]);
 
   const refetchDudas = useCallback(async () => {
     const { data } = await supabase
@@ -87,6 +149,7 @@ export function Dashboard(props: Props) {
   const urgentes = dudas.filter((d) => d.urgente && d.estado === 'pendiente').length;
 
   return (
+    <RecordingProvider>
     <div className="flex min-h-dvh flex-col bg-ink-950">
       <HeaderNow nombre={props.nombre} blocks={todayBlocks} now={now} pendientes={pendientes} urgentes={urgentes} />
 
@@ -95,7 +158,7 @@ export function Dashboard(props: Props) {
           <div className="space-y-6">
             <DayTimeline
               blocks={todayBlocks}
-              events={props.calendarEvents}
+              events={events}
               now={now}
               supabase={supabase}
               onBlockSaved={onBlockSaved}
@@ -131,5 +194,6 @@ export function Dashboard(props: Props) {
       <BottomNav tab={tab} setTab={setTab} pendientes={pendientes} urgentes={urgentes} />
       <InstallPrompt />
     </div>
+    </RecordingProvider>
   );
 }

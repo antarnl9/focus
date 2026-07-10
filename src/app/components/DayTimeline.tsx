@@ -8,6 +8,7 @@ import { minutesOfDay, hmToMinutes, prettyTime } from '@/lib/time';
 import { BLOCK_META } from '@/lib/defaults';
 import { EventSheet } from './EventSheet';
 import { BlockSheet } from './BlockSheet';
+import { useRecording } from './RecordingProvider';
 
 interface Item {
   key: string;
@@ -40,6 +41,15 @@ export function DayTimeline({
   const mins = minutesOfDay(now);
   const [selEvent, setSelEvent] = useState<CalendarEvent | null>(null);
   const [selBlock, setSelBlock] = useState<DayBlock | null>(null);
+  const rec = useRecording();
+
+  function grabarItem(it: Item) {
+    if (it.kind === 'event' && it.event) {
+      rec.start({ label: it.event.summary, attendeeEmails: (it.event.attendees ?? []).map((a) => a.email) });
+    } else if (it.kind === 'block' && it.block) {
+      rec.start({ label: it.block.label, blockRef: it.block.id });
+    }
+  }
 
   const items = useMemo<Item[]>(() => {
     const b: Item[] = blocks.map((bl) => ({
@@ -130,7 +140,20 @@ export function DayTimeline({
                     )}
                   </div>
                 </div>
-                <span className="self-center text-slate-500">›</span>
+                {isActive && rec.canRecord && !rec.recording ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      grabarItem(it);
+                    }}
+                    disabled={rec.busy}
+                    className="self-center rounded-full bg-urgent px-3 py-1.5 text-xs font-semibold text-white active:scale-95"
+                  >
+                    ● Grabar
+                  </button>
+                ) : (
+                  <span className="self-center text-slate-500">›</span>
+                )}
               </div>
             </li>
           );

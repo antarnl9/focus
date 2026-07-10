@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { env } from '@/lib/env';
-import { runPreWindowReminder, runDailyPrompt } from '@/lib/reminders';
+import { runPreWindowReminder, runDailyPrompt, runCalendarMaintenance } from '@/lib/reminders';
 
 // Endpoint de cron protegido — alternativa a node-cron del worker (spec §6).
 // Configúralo en Railway Cron para pegarle en los horarios (hora CDMX):
@@ -27,8 +27,11 @@ export async function GET(request: Request) {
       case 'daily':
         await runDailyPrompt();
         break;
+      case 'calendar':
+        await runCalendarMaintenance();
+        break;
       default:
-        return NextResponse.json({ error: 'task inválida (ventana1|ventana2|daily)' }, { status: 400 });
+        return NextResponse.json({ error: 'task inválida (ventana1|ventana2|daily|calendar)' }, { status: 400 });
     }
     return NextResponse.json({ ok: true, task });
   } catch (e) {

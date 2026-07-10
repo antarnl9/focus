@@ -2,6 +2,7 @@ import { createSupabaseAdmin } from './supabase/admin';
 import { getCooUserId, getCooSlackId } from './bootstrap';
 import { preWindowSummary } from './anthropic';
 import { generateAndSaveDailies } from './daily';
+import { ensureCalendarWatch, syncCalendar } from './calendar';
 import { dmUser } from './slack';
 import { sendPush } from './push';
 import { hasAnthropic, hasSlack, env } from './env';
@@ -72,6 +73,15 @@ export async function runDailyPrompt(): Promise<void> {
     const cooSlack = await getCooSlackId();
     if (cooSlack) await dmUser(cooSlack, '📊 Es hora del Daily. Tu borrador está listo en Focus para revisar y enviar.').catch(() => {});
   }
+}
+
+// Mantenimiento del calendario (cron): renueva el canal push antes de que
+// caduque y sincroniza como red de seguridad por si algún push se perdió.
+export async function runCalendarMaintenance(): Promise<void> {
+  const cooId = await getCooUserId();
+  if (!cooId) return;
+  await ensureCalendarWatch(cooId).catch((e) => console.error('[reminders] ensureCalendarWatch', e));
+  await syncCalendar(cooId).catch((e) => console.error('[reminders] syncCalendar', e));
 }
 
 export { env };

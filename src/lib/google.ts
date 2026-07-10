@@ -46,7 +46,7 @@ function safeDecrypt(v: string): string {
 }
 
 // ¿El evento lo creó Focus? (por etiqueta nueva o por el prefijo viejo [Focus]).
-function isFocusEvent(e: { summary?: string | null; extendedProperties?: { private?: Record<string, string> | null } | null }): boolean {
+export function isFocusEvent(e: { summary?: string | null; extendedProperties?: { private?: Record<string, string> | null } | null }): boolean {
   return e.extendedProperties?.private?.focus === '1' || (e.summary ?? '').startsWith('[Focus]');
 }
 
