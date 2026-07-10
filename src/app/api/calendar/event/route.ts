@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
 import { inviteToEvent, rescheduleEvent, cancelEvent } from '@/lib/google';
+import { syncCalendar } from '@/lib/calendar';
 
 // Editar un evento de Calendar desde la app: invitar, mover o cancelar.
 export async function POST(request: Request) {
@@ -35,5 +36,7 @@ export async function POST(request: Request) {
   }
 
   if (!res.ok) return NextResponse.json({ error: res.error || 'Error' }, { status: 400 });
+  // Refresca el espejo para que el home muestre el cambio de inmediato.
+  await syncCalendar(user.id).catch(() => {});
   return NextResponse.json({ ok: true });
 }

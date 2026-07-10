@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { VoiceButton } from './VoiceButton';
 
 interface PendingAction {
   tool: string;
@@ -35,7 +34,51 @@ export function AssistantFab() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState(false);
+  const [listening, setListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recRef = useRef<any>(null);
+  const baseRef = useRef('');
+
+  // Dictado: el texto (parcial + final) va cayendo al campo para revisar y enviar.
+  function toggleMic() {
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      alert('Tu navegador no permite dictado por voz aquí. Escribe tu mensaje.');
+      return;
+    }
+    const rec = new SR();
+    rec.lang = 'es-MX';
+    rec.interimResults = true;
+    rec.continuous = true;
+    baseRef.current = input.trim();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      let interim = '';
+      let finalTxt = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalTxt += t + ' ';
+        else interim += t;
+      }
+      if (finalTxt) baseRef.current = (baseRef.current + ' ' + finalTxt).trim();
+      setInput((baseRef.current + ' ' + interim).trim());
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    try {
+      rec.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -44,6 +87,7 @@ export function AssistantFab() {
   async function send(text: string) {
     const t = text.trim();
     if (!t || loading) return;
+    recRef.current?.stop();
     const next = [...msgs, { role: 'user' as const, content: t }];
     setMsgs(next);
     setInput('');
@@ -109,7 +153,14 @@ export function AssistantFab() {
           <h2 className="text-base font-bold">Copiloto</h2>
           <p className="text-[11px] text-slate-500">Pídele mover juntas, invitar, consultar…</p>
         </div>
-        <button onClick={() => setOpen(false)} aria-label="Cerrar" className="grid h-9 w-9 place-items-center rounded-full border border-ink-700 text-slate-300 active:scale-90">
+        <button
+          onClick={() => {
+            recRef.current?.stop();
+            setOpen(false);
+          }}
+          aria-label="Cerrar"
+          className="grid h-9 w-9 place-items-center rounded-full border border-ink-700 text-slate-300 active:scale-90"
+        >
           ✕
         </button>
       </header>
@@ -170,13 +221,26 @@ export function AssistantFab() {
       </div>
 
       <div className="border-t border-ink-800 px-3 py-2.5 safe-bottom">
+        {listening && (
+          <p className="mb-1.5 flex items-center justify-center gap-1.5 text-[11px] font-medium text-urgent">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-urgent" /> Escuchando… habla y toca ⏹ para terminar
+          </p>
+        )}
         <div className="flex items-center gap-2">
-          <VoiceButton onText={(t) => send(t)} />
+          <button
+            onClick={toggleMic}
+            aria-label={listening ? 'Detener dictado' : 'Dictar'}
+            className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-lg active:scale-90 ${
+              listening ? 'animate-pulse bg-urgent text-white' : 'bg-ink-800 text-slate-300'
+            }`}
+          >
+            {listening ? '⏹' : '🎤'}
+          </button>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && send(input)}
-            placeholder="Escribe o dicta…"
+            placeholder={listening ? 'Escuchando…' : 'Escribe o toca 🎤'}
             className="min-w-0 flex-1 rounded-full bg-ink-900 px-4 py-2.5 text-sm outline-none ring-1 ring-ink-700 focus:ring-brand"
           />
           <button

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
 import { createEvent } from '@/lib/google';
+import { syncCalendar } from '@/lib/calendar';
 
 // Crea un evento en Calendar (a partir de un bloque) e invita personas.
 export async function POST(request: Request) {
@@ -24,5 +25,6 @@ export async function POST(request: Request) {
     emails: b.emails ?? [],
   });
   if (!res.ok) return NextResponse.json({ error: res.error || 'Error' }, { status: 400 });
+  await syncCalendar(auth.user.id).catch(() => {});
   return NextResponse.json({ ok: true });
 }
