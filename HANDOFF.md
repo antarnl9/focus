@@ -1,6 +1,8 @@
 # T1 Focus — Documento de continuidad (handoff)
 
-> Guía para quien va a dar mantenimiento/continuidad a la app. Explica qué es, cómo está construida, cómo se despliega y qué está pendiente. Última actualización: 2026‑07‑09.
+> Guía para quien va a dar mantenimiento/continuidad a la app. Explica qué es, cómo está construida, cómo se despliega y qué está pendiente. Última actualización: 2026‑07‑10.
+>
+> **Novedades recientes (jul 2026):** copiloto/asistente por chat+voz con acciones reales (§8); transcripción de juntas **inline** en el servicio web (ya NO requiere worker, §10); el Daily ahora toma también el resumen de las juntas grabadas (§9); recurrencia de calendario respeta los días específicos del bloque; los cambios de calendario se reflejan al instante; `loading.tsx` al abrir.
 
 ---
 
@@ -10,9 +12,10 @@
 
 - **Agenda del día en bloques** + eventos reales de Google Calendar, mezclados.
 - **Dudas del equipo** que entran por Slack (`/duda`) con contexto obligatorio, más "duda en persona" desde la app; con **triage por IA** (urgencia, completitud).
-- **Grabación de juntas** (desde el home o el tab Juntas) → transcripción (Deepgram) → **resumen + acuerdos con IA** → bitácora.
+- **Grabación de juntas** (desde el home o el tab Juntas, con Wake Lock) → transcripción (Deepgram) → **resumen + acuerdos con IA** → bitácora. Los invitados del evento se guardan/casan como personas (incl. externos).
+- **Copiloto** (asistente ✨, botón flotante): chat por **voz o texto** que ejecuta acciones reales — mover/crear/invitar/cancelar juntas, consultar agenda/dudas/personas, tomar notas — con **confirmación antes** de cualquier acción que mande correo.
 - **Prioridades** del día y **bitácora** (log de lo que pasó).
-- **Daily** de cierre generado con IA en **dos versiones**: **CEO Brief** (formato estricto para el CEO) y **daily personal** (para el COO), ambos con historial.
+- **Daily** de cierre generado con IA en **dos versiones**: **CEO Brief** (formato estricto para el CEO) y **daily personal** (para el COO), ambos con historial. Toma bitácora, dudas, prioridades, acuerdos y **el resumen de las juntas grabadas** del día.
 - **Métricas** por rango de fechas + **coach de alineación** (¿lo que hiciste va con tus prioridades?).
 - **Contexto de Slack**: resumen de DMs/canales + "lo importante a atacar", que alimenta a la IA.
 - **Directorio de personas** (49 de T1 precargadas) que conecta juntas/dudas con gente.
@@ -32,8 +35,8 @@ Público: **un solo usuario** (el COO). Hay allowlist de correos.
 | IA | **Anthropic** SDK (`@anthropic-ai/sdk`), modelo `claude-opus-4-8` |
 | Calendario | **Google Calendar API** (`googleapis`) lectura/escritura + push (watch) |
 | Chat | **Slack** Web API (`@slack/web-api`) — comandos, eventos, OAuth |
-| Transcripción | **Deepgram** (`@deepgram/sdk`), es‑MX |
-| Jobs | **pg-boss** (sobre el mismo Postgres, sin Redis) + **node-cron** (worker) |
+| Transcripción | **Deepgram** (`@deepgram/sdk`), es‑MX — corre **inline** en el web service con `after()` |
+| Jobs | `node-cron`/`pg-boss` en un **worker opcional** (solo para recordatorios/Daily programados; la transcripción ya NO lo usa) |
 | Push | **web-push** (VAPID) |
 | Hosting | **Railway** (auto‑deploy desde GitHub) |
 
@@ -52,16 +55,16 @@ Dos procesos + Supabase + servicios externos:
                          │               │ realtime          │ pg-boss (schema pgboss)
         lee/escribe      │               │ (dudas, eventos)  │
    ┌─────────────────────┴───┐     ┌─────┴───────────┐   ┌───┴──────────────────┐
-   │  WEB SERVICE (Next.js)  │     │   Navegador     │   │  WORKER (tsx)        │
-   │  páginas + /api/*        │◀───▶│  PWA (celular)  │   │  pg-boss + node-cron │
-   │  encola jobs             │     └─────────────────┘   │  transcribe + cron   │
-   └───┬─────────┬──────┬─────┘                           └──────────────────────┘
-       │         │      │
-   Anthropic   Google  Slack   (+ Deepgram desde el worker, + web-push)
+   │  WEB SERVICE (Next.js)  │     │   Navegador     │   │  WORKER (tsx) OPCIONAL│
+   │  páginas + /api/*        │◀───▶│  PWA (celular)  │   │  node-cron            │
+   │  transcribe + copiloto   │     └─────────────────┘   │  (recordatorios/Daily)│
+   └───┬────┬─────┬─────┬─────┘                           └──────────────────────┘
+       │    │     │     │
+  Anthropic Google Slack Deepgram        (+ web-push)
 ```
 
-- **Web service** (`npm start` → `next start`): sirve la PWA y todas las `/api/*`. Encola jobs en pg-boss.
-- **Worker** (`npm run worker` → `tsx worker/index.ts`): procesa la cola de **transcripción** y corre los **cron** de recordatorios/Daily. **Es un servicio Railway aparte** (mismo repo, distinto start command). Si no está corriendo: no hay transcripción automática ni recordatorios (ver §11 y §12).
+- **Web service** (`npm start` → `next start`): sirve la PWA y todas las `/api/*`. **La transcripción de juntas y el copiloto corren aquí** (transcripción vía `after()` tras subir el audio). Es el único proceso imprescindible.
+- **Worker** (`npm run worker` → `tsx worker/index.ts`): **opcional**. Corre los **cron** de recordatorios/Daily (node-cron) y una cola pg-boss (ya sin uso para transcripción). Si no está desplegado, la app funciona; solo no se disparan los recordatorios programados (ver §10).
 - **Supabase Realtime**: el navegador se suscribe a cambios de `dudas` y `eventos` para actualizarse en vivo.
 
 ---
@@ -72,6 +75,7 @@ Dos procesos + Supabase + servicios externos:
 src/
   app/
     page.tsx                 # HOME (tab "Hoy"): agenda + prioridades; lee eventos del espejo
+    loading.tsx              # esqueleto que se muestra al abrir (evita pantalla en blanco)
     login/ acceso-restringido/ offline/
     agenda/ calendario/      # editar plantilla del día / vista mensual
     metricas/ negocios/ contexto/ perfil/ personas/ personas/[id]/ personas/import/
@@ -89,20 +93,23 @@ public/                      # PWA: manifest, sw.js, íconos
 - `Dashboard.tsx` — orquesta el home, tabs, estado de dudas/eventos, Realtime, sync del calendario, envuelve todo en `RecordingProvider`.
 - `DayTimeline.tsx` — "Agenda de hoy": mezcla bloques + eventos; botón **● Grabar** en lo que está "ahora".
 - `RecordingProvider.tsx` — grabación global (barra flotante + Wake Lock + auto‑ligado a junta/personas).
-- `Recorder.tsx` — tab Juntas (grabación clásica con selección manual) + tarjetas de grabaciones.
+- `Recorder.tsx` — tab Juntas: por default la junta que está pasando **ahora** (evento real con invitados) + selector de juntas de hoy + botón "Transcribir y resumir" por grabación.
+- `AssistantFab.tsx` — **copiloto**: botón flotante ✨ + chat (voz con dictado en vivo + texto) + tarjetas de confirmación de acciones.
 - `DailyPanel.tsx` (CEO Brief) · `DailyPersonal.tsx` (daily personal en Métricas).
 - `MetricsView.tsx` · `SlackContextView.tsx` · `NegociosView.tsx` · `PerfilCoo.tsx` · `PersonasDirectory.tsx` · `PersonaProfile.tsx`.
-- `BlockSheet.tsx` / `EventSheet.tsx` — editar bloque / invitar‑mover‑cancelar evento.
-- `BottomNav.tsx` · `HeaderNow.tsx` · `ThemeToggle.tsx` · `InstallPrompt.tsx` · `RegisterSW.tsx`.
+- `BlockSheet.tsx` / `EventSheet.tsx` — editar bloque (actualiza el evento recurrente en Google) / invitar‑mover‑cancelar evento.
+- `persona-util.ts` — helpers de personas (incl. `ensurePersonasFromAttendees`, crea/casa invitados como personas).
+- `BottomNav.tsx` · `HeaderNow.tsx` · `ThemeToggle.tsx` · `InstallPrompt.tsx` · `RegisterSW.tsx` · `VoiceButton.tsx`.
 
 **Lib** (`src/lib/`):
-- `google.ts` — cliente OAuth de Calendar, listar/crear/editar/cancelar eventos, plantilla, cleanup.
+- `google.ts` — cliente OAuth de Calendar; listar/crear/editar/cancelar eventos; plantilla (recurrencia por `dias` del bloque); `updateBlockEvent`; cleanup.
 - `calendar.ts` — **espejo `eventos`**: `syncCalendar` (incremental), `getTodayEventsFromDb`, `ensureCalendarWatch` (push), helpers.
+- `assistant.ts` — **copiloto**: definición de herramientas (tool use), `runAssistant` (loop) y `executeAction` (ejecuta las acciones confirmadas).
 - `slack.ts` / `slackcontext.ts` — API de Slack / sync y resumen del contexto.
 - `anthropic.ts` — todas las llamadas a la IA (ver §9).
 - `coo.ts` — arma el contexto para la IA (perfil COO + negocios + Slack).
-- `daily.ts` — genera y guarda los dos dailies. `reminders.ts` — tareas de cron. `metrics.ts` — métricas + coach.
-- `transcription.ts` — pipeline de junta (worker). `deepgram.ts` — transcribe. `queue.ts` — pg-boss.
+- `daily.ts` — reúne insumos (incl. resumen de juntas) y guarda los dos dailies. `reminders.ts` — tareas de cron. `metrics.ts` — métricas + coach.
+- `transcription.ts` — pipeline de junta (`processTranscription`, se invoca inline con `after()`). `deepgram.ts` — transcribe. `queue.ts` — pg-boss (solo si se usa el worker).
 - `auth.ts` (`requireUser`), `bootstrap.ts` (idempotente al entrar), `crypto.ts` (AES‑256‑GCM), `env.ts`, `time.ts`, `push.ts`, `defaults.ts`, `types.ts`.
 
 ---
@@ -146,7 +153,7 @@ En **Railway → Variables**. Regla importante: **sin comillas** en los valores.
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ | URL del proyecto Supabase |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | anon/publishable key (nombre EXACTO, ver §11 bugs) |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | service role (backend, bypassa RLS) |
-| `DATABASE_URL` | ✅ | conexión Postgres (para pg-boss). SSL requerido |
+| `DATABASE_URL` | –(worker) | conexión Postgres para pg-boss (solo si corres el worker). SSL requerido |
 | `NEXT_PUBLIC_APP_URL` | ✅ | dominio público con `https://`, **sin** slash ni espacios finales |
 | `ALLOWED_EMAILS` | ✅ | correos permitidos (coma‑sep). Default `antar@t1.com` |
 | `GOOGLE_HOSTED_DOMAIN` | – | dominio permitido en el login (default `t1.com`) |
@@ -157,7 +164,7 @@ En **Railway → Variables**. Regla importante: **sin comillas** en los valores.
 | `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` | ✅(slack) | bot + verificación de firma |
 | `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` | –(slack) | OAuth para leer conversaciones (contexto) |
 | `SLACK_DUDAS_CHANNEL_ID` / `SLACK_DAILY_CHANNEL_ID` | – | canales de dudas / del CEO Brief |
-| `DEEPGRAM_API_KEY` | – | transcripción. Sin ella, la grabación se guarda pero no se transcribe |
+| `DEEPGRAM_API_KEY` | – | transcripción de juntas (en el **web service**). Sin ella, la grabación se guarda pero no se transcribe |
 | `TOKEN_ENCRYPTION_KEY` | ✅ | clave AES‑256‑GCM para cifrar tokens en `integraciones` |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | – | Web Push (PWA) |
 | `CRON_SECRET` | – | protege `/api/cron` (y token del webhook de calendar) |
@@ -183,8 +190,11 @@ En **Railway → Variables**. Regla importante: **sin comillas** en los valores.
 | `POST /api/calendar/sync` | dispara `syncCalendar` (lo llama el home al abrir/enfocar/cada 60s) |
 | `POST /api/calendar/notifications` | **webhook** push de Google → corre el sync |
 | `GET /api/calendar/range` | eventos de un rango (vista mensual `/calendario`) — llama a Google en vivo |
-| `POST /api/calendar/create` / `event` / `template` / `cleanup` | crear evento / invitar‑mover‑cancelar / escribir plantilla / borrar eventos `[Focus]` |
-| `POST /api/recordings/finalize` | marca grabación subida y **encola transcripción** (si hay Deepgram) |
+| `POST /api/calendar/create` / `event` / `template` / `cleanup` / `block` | crear evento / invitar‑mover‑cancelar / escribir plantilla / borrar `[Focus]` / actualizar el evento recurrente de un bloque. `create` y `event` **re‑sincronizan el espejo** para reflejar el cambio al instante |
+| `POST /api/recordings/finalize` | marca grabación subida y **transcribe inline** con `after()` (si hay Deepgram) |
+| `POST /api/recordings/transcribe` | re‑transcribe una grabación existente (botón "Transcribir y resumir") |
+| `POST /api/assistant` | **copiloto**: corre el loop de tool‑use → `{ reply, pendingActions }` |
+| `POST /api/assistant/execute` | ejecuta una acción del copiloto ya confirmada por el usuario |
 | `GET/POST /api/daily` · `/generate` · `/send` | daily guardado + historial / generar ambos / enviar CEO Brief a Slack |
 | `GET /api/metrics` · `/coach` | métricas por rango + coach de alineación |
 | `POST /api/slack/commands` · `/events` · `/interactions` | `/duda`, eventos, botones de Slack |
@@ -198,13 +208,20 @@ En **Railway → Variables**. Regla importante: **sin comillas** en los valores.
 ### Sync de Google Calendar (el subsistema más nuevo — detalle)
 1. **Espejo local `eventos`**: el home NO llama a Google al render; lee de la tabla (`getTodayEventsFromDb`). Instantáneo y aguanta mala señal.
 2. **`syncCalendar` (incremental)**: usa `cal_sync_token` (Google solo manda lo que cambió). Upsert de eventos; borra cancelados y los `[Focus]`. Si el token caduca (410) hace full‑sync de una ventana (‑7d…+60d). Guarda el nuevo `nextSyncToken`.
-3. **Disparo**: `Dashboard.tsx` hace `POST /api/calendar/sync` al montar, al volver la app (`visibilitychange`) y cada 60s; luego relee de `eventos`.
-4. **Realtime**: suscrito a `eventos` → la UI se actualiza sola cuando el espejo cambia.
+3. **Disparo**: `Dashboard.tsx` hace `POST /api/calendar/sync` al montar, al volver la app (`visibilitychange`) y cada **5 min**, con debounce (no re‑sincroniza si pasó <2 min); luego relee de `eventos`. Además, los endpoints que **escriben** en el calendario (`create`, `event`, y el copiloto) sincronizan el espejo enseguida → el cambio se ve al instante.
+4. **Realtime**: suscrito a `eventos` (con debounce) → la UI se actualiza sola cuando el espejo cambia.
 5. **Push (watch)**: `ensureCalendarWatch` registra un canal que apunta a `/api/calendar/notifications`. El canal caduca ~7 días → lo renueva el cron `?task=calendar`. **Requiere dominio verificado en Google Cloud** (ver §11). Mientras no lo haya, el poll/focus cubre (near‑realtime).
+6. **Recurrencia por días**: al escribir la plantilla o editar un bloque, la regla `RRULE` se arma según los `dias` del bloque (día específico = solo ese día; vacío = lun‑vie). Editar un bloque ya sincronizado actualiza su evento vía `updateBlockEvent`.
 
 ### Grabación de juntas (pipeline)
-`RecordingProvider`/`Recorder` → `getUserMedia` + `MediaRecorder` → sube blob a Storage `grabaciones` → `POST /api/recordings/finalize` → si hay Deepgram, encola en pg-boss (`transcribe`) → **worker** `processTranscription`: descarga audio → Deepgram (es‑MX) → `summarizeMeeting` (IA: resumen + acuerdos) → actualiza `grabaciones` y escribe en `bitacora`. Estados: `grabando → subida → transcribiendo → procesando → lista` (o `lista` directa sin Deepgram).
-**Grabar desde el home:** botón "● Grabar" en el ítem "ahora"; `RecordingProvider` mantiene **Wake Lock** (pantalla encendida), barra flotante entre tabs y auto‑liga la junta con las personas (casa correos de invitados con `personas`).
+`RecordingProvider`/`Recorder` → `getUserMedia` + `MediaRecorder` → sube blob a Storage `grabaciones` → `POST /api/recordings/finalize` → si hay Deepgram, corre **inline con `after()`** `processTranscription`: descarga audio → Deepgram (es‑MX) → `summarizeMeeting` (IA: resumen + acuerdos) → actualiza `grabaciones` y escribe en `bitacora`. Estados: `grabando → subida → transcribiendo → procesando → lista` (o `lista` directa sin Deepgram). Botón **"Transcribir y resumir"** en cada grabación para reprocesar (`/api/recordings/transcribe`). **Ya NO requiere el worker.**
+**Grabar desde el home:** botón "● Grabar" en el ítem "ahora"; `RecordingProvider` mantiene **Wake Lock** (pantalla encendida), barra flotante entre tabs y auto‑liga la junta con las personas (crea/casa invitados con `ensurePersonasFromAttendees`, incl. externos).
+
+### Copiloto (asistente con tool use)
+`AssistantFab` (botón flotante ✨) → chat por voz (dictado en vivo al campo) o texto → `POST /api/assistant` con el historial. En el server, `runAssistant` corre un loop de **tool use** de Claude:
+- **Lectura/directas** (se ejecutan en el loop): `agenda_hoy`, `agenda_rango`, `buscar_persona`, `listar_dudas`, `tomar_nota`, `crear_persona`.
+- **Que mandan correo** (`mover_junta`, `crear_junta`, `invitar_a_junta`, `cancelar_junta`): NO se ejecutan; regresan como **propuesta** (`pendingActions`). El usuario confirma con un tap → `POST /api/assistant/execute` → `executeAction` llama a `google.ts` y re‑sincroniza el espejo.
+Todo reusa `google.ts` + Supabase; no hay infra nueva.
 
 ---
 
@@ -223,29 +240,36 @@ Modelo `claude-opus-4-8`, salidas JSON estructuradas. Funciones:
 | `preWindowSummary` | resumen 15 min antes de una ventana de dudas |
 | `fridayReview` | (existe, no cableado en UI) |
 
+`composeDaily` y `composeCeoDaily` reciben, además, el **resumen de las juntas grabadas** del día (`DailyInput.juntas`, armado en `daily.ts`).
+
+El **copiloto** (`src/lib/assistant.ts`) usa **tool use** de Claude (no JSON estructurado): `runAssistant` corre el loop con herramientas de calendario/dudas/personas (ver §8).
+
 El **contexto** que reciben (perfil del COO + negocios T1 + resumen de Slack) lo arma `coo.ts → fullCooContext`.
 
 ---
 
 ## 10. Cron, worker y jobs
 
-Dos formas de correr las tareas programadas (recordatorios y Daily):
+> La **transcripción ya NO usa el worker** — corre inline en el web service (§8). El worker quedó **solo para los recordatorios/Daily programados**, y es **opcional**.
 
-- **A) Worker (recomendado si está desplegado):** `worker/index.ts` corre `node-cron` (hora CDMX, lun‑vie): **15:00** y **18:45** pre‑ventana de dudas, **20:45** genera el Daily. También procesa la cola de **transcripción** (pg-boss). Necesita ser un **servicio Railway aparte** con start `npm run worker`.
-- **B) Endpoint `/api/cron`:** alternativa sin worker, para un cron externo (cron-job.org) que pegue a `…/api/cron?task=…&secret=CRON_SECRET`. Tareas: `ventana1`, `ventana2`, `daily`, `calendar` (renueva watch + sync de respaldo).
+Dos formas de disparar los recordatorios (pre‑ventana de dudas y Daily):
 
-> El `?task=calendar` **no** está en el cron del worker; solo en el endpoint. La transcripción **solo** corre en el worker.
+- **A) Worker:** `worker/index.ts` corre `node-cron` (hora CDMX, lun‑vie): **15:00** y **18:45** pre‑ventana, **20:45** genera el Daily. Servicio Railway aparte con start `npm run worker`.
+- **B) Endpoint `/api/cron` + cron externo (recomendado si NO hay worker):** un servicio como cron-job.org pega a `…/api/cron?task=…&secret=CRON_SECRET`. Tareas: `ventana1`, `ventana2`, `daily`, `calendar` (renueva watch + sync de respaldo).
+
+> El `?task=calendar` **no** está en el cron del worker; solo en el endpoint.
 
 ---
 
 ## 11. Estado actual y pendientes conocidos
 
-- ✅ **Funciona hoy:** login, agenda, dudas, prioridades, bitácora, personas, perfil/negocios, dailies (CEO+personal), métricas+coach, contexto de Slack, sync de calendario (espejo+poll+realtime), grabar desde el home con Wake Lock.
-- ⚠️ **Migración 12 pendiente de correr** en Supabase para que el espejo `eventos` exista (si no, el home no verá eventos). Igual conviene correr `data-negocios-contexto.sql`.
+- ✅ **Funciona hoy:** login, agenda, dudas, prioridades, bitácora, personas, perfil/negocios, dailies (CEO+personal, con resumen de juntas), métricas+coach, contexto de Slack, sync de calendario (espejo+poll+realtime, cambios al instante), grabar desde el home con Wake Lock, **copiloto** con acciones confirmadas.
+- ⚠️ **Migraciones pendientes de correr** en Supabase: hasta la **12** (espejo `eventos`) + `data-negocios-contexto.sql`. Sin la 12 el home no ve eventos.
+- ⚠️ **Transcripción**: requiere `DEEPGRAM_API_KEY` en el web service. **Ya NO requiere worker** (corre inline con `after()`). Sin la key, el audio se guarda pero sin transcript; hay botón "Transcribir y resumir" para reprocesar.
 - ⚠️ **Webhook push de Calendar no activable** hasta tener **dominio propio** verificado en Google Cloud (el `*.up.railway.app` no se puede verificar). El poll/focus cubre mientras tanto. Código ya listo.
-- ⚠️ **Crons externos no configurados** (si el worker no está desplegado): el Daily y los recordatorios no se disparan solos. Pendiente: crear 4 jobs en cron-job.org (`daily` 20:45, `ventana1` 15:00, `ventana2` 18:45 CDMX→UTC, `calendar` c/12h).
-- ⚠️ **Transcripción automática** requiere `DEEPGRAM_API_KEY` + worker corriendo. Sin eso, el audio se guarda y es reproducible, pero sin transcript.
-- ℹ️ `Recorder.tsx` (tab Juntas) y `RecordingProvider` (home) son grabadores independientes; no grabar desde ambos a la vez.
+- ⚠️ **Recordatorios/Daily programados**: no se disparan solos salvo que corras el worker o configures un cron externo (cron-job.org: `daily` 20:45, `ventana1` 15:00, `ventana2` 18:45 CDMX→UTC, `calendar` c/12h). La generación manual del Daily sí funciona desde la app.
+- ℹ️ **Cancelar evento**: Google solo deja cancelar/borrar juntas que **tú organizaste**; para invitadas por otros regresa error (limitación de Google).
+- ℹ️ `Recorder.tsx` (tab Juntas) y `RecordingProvider` (home) comparten grabación vía el provider; el tab Juntas delega start/stop en él.
 
 **Bugs históricos ya resueltos** (para contexto): anon key mal nombrada (`PUBLISHABLE` vs `ANON`), `NEXT_PUBLIC_APP_URL` sin `https://` o con espacio, Site/Redirect URLs de Supabase apuntando a localhost, `redirect_uri` de Slack con espacio, sync de Slack cortando DMs (se cambió a `users.conversations`), delimitador `$$` chocando en el SQL de negocios (se usó `$body$`).
 
@@ -254,8 +278,8 @@ Dos formas de correr las tareas programadas (recordatorios y Daily):
 ## 12. Deploy y correr local
 
 ### Railway (producción)
-1. **Servicio web** (auto‑deploy de `main`): build `next build`, start `next start`. Todas las variables de §6.
-2. **Servicio worker** (opcional pero recomendado): mismo repo, start command `npm run worker`. Mismas variables (necesita `DATABASE_URL`, `DEEPGRAM_API_KEY`, `ANTHROPIC_API_KEY`, Slack, push).
+1. **Servicio web** (auto‑deploy de `main`): build `next build`, start `next start`. Todas las variables de §6, incluida `DEEPGRAM_API_KEY` (la transcripción corre aquí).
+2. **Servicio worker** (opcional, solo para recordatorios/Daily programados): mismo repo, start `npm run worker`. Necesita `DATABASE_URL`, `ANTHROPIC_API_KEY`, Slack, push. Alternativa sin worker: cron externo a `/api/cron` (§10).
 3. **Supabase**: correr `schema.sql` + `all-migrations.sql` (o migraciones 01‑12) + `data-negocios-contexto.sql`. Configurar **Auth → Google**, **Site URL** y **Redirect URLs** (`…/auth/callback`) al dominio de Railway. Prender **Realtime** para `dudas` y `eventos`.
 4. **Google Cloud**: OAuth consent + credenciales; scopes de Calendar; (a futuro) verificar dominio propio para el webhook.
 5. **Slack app**: comandos/eventos/interactivity apuntando a `…/api/slack/*`, scopes, signing secret; OAuth de usuario para el contexto.
@@ -287,14 +311,16 @@ npm run build                # verificar build de producción
 
 | Quiero… | Archivo(s) |
 |---|---|
-| Cambiar la agenda/plantilla del día | `day_blocks` (migraciones 06/08), `/agenda`, `BlockEditor`/`BlockSheet` |
+| Cambiar la agenda/plantilla del día | `day_blocks` (migraciones 06/08), `/agenda`, `BlockEditor`/`BlockSheet`; recurrencia en `google.ts → rruleFor/updateBlockEvent` |
 | Ajustar el sync de calendario | `src/lib/calendar.ts`, `Dashboard.tsx` (efectos de sync/realtime) |
-| Cambiar el formato del CEO Brief | `anthropic.ts → composeCeoDaily` |
+| Cambiar el formato del CEO Brief / insumos del Daily | `anthropic.ts → composeCeoDaily/composeDaily`, `daily.ts → gatherDailyData` |
 | Cambiar cómo se arma el contexto de IA | `src/lib/coo.ts` |
-| Tocar la grabación desde el home | `RecordingProvider.tsx`, `DayTimeline.tsx` |
-| Pipeline de transcripción | `transcription.ts`, `deepgram.ts`, `worker/index.ts` |
+| Tocar el **copiloto** (herramientas, acciones, prompt) | `src/lib/assistant.ts`, `AssistantFab.tsx`, `/api/assistant(/execute)` |
+| Tocar la grabación desde el home | `RecordingProvider.tsx`, `DayTimeline.tsx`, `Recorder.tsx` |
+| Pipeline de transcripción (inline) | `transcription.ts`, `deepgram.ts`, `/api/recordings/finalize` y `/transcribe` |
 | Horarios de recordatorios | `worker/index.ts` (node-cron) y/o `/api/cron` |
-| Personas / import | `personas` (02/03/05), `PersonasDirectory`, `/api/personas/import` |
+| Pantalla de carga | `src/app/loading.tsx` |
+| Personas / import | `personas` (02/03/05), `PersonasDirectory`, `persona-util.ts`, `/api/personas/import` |
 | Contexto de negocio T1 | `negocios` (04) + `data-negocios-contexto.sql`, `NegociosView` |
 
 ---
