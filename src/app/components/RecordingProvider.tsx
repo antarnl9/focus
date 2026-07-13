@@ -48,6 +48,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const [label, setLabel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [canRecord, setCanRecord] = useState(true);
+  // Audio que NO se pudo subir: se guarda para reintentar/descargar (no perderlo).
+  const [failed, setFailed] = useState<{ blob: Blob; filename: string; id: string; path: string; dur: number } | null>(null);
 
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -103,7 +105,10 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mime = pickMime();
         mimeRef.current = mime;
-        const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+        // Bitrate bajo (voz): archivos ~4× más chicos → subidas más confiables.
+        const opts: MediaRecorderOptions = { audioBitsPerSecond: 48000 };
+        if (mime) opts.mimeType = mime;
+        const mr = new MediaRecorder(stream, opts);
         chunksRef.current = [];
         mr.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
         mr.onstop = () => finalize(uid);
@@ -158,15 +163,42 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     const ext = mime.includes('mp4') || mime.includes('aac') ? 'm4a' : 'webm';
     const path = `${uid}/${id}.${ext}`;
     setBusy(true);
-    const { error } = await supabase.storage.from('grabaciones').upload(path, blob, { contentType: blob.type, upsert: true });
-    if (!error) {
+
+    // Sube con reintentos (las redes móviles fallan en subidas grandes).
+    let uploaded = false;
+    for (let attempt = 0; attempt < 3 && !uploaded; attempt++) {
+      const { error } = await supabase.storage.from('grabaciones').upload(path, blob, { contentType: blob.type, upsert: true });
+      if (!error) uploaded = true;
+      else if (attempt < 2) await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+    }
+
+    if (uploaded) {
       await fetch('/api/recordings/finalize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, audio_path: path, duracion_seg: dur, mimetype: blob.type }),
       }).catch(() => {});
+      setFailed(null);
     } else {
-      alert('Falló la subida del audio.');
+      // No se pudo subir: conserva el audio para reintentar o descargar (no se pierde).
+      setFailed({ blob, filename: `junta-${id}.${ext}`, id, path, dur });
+    }
+    setBusy(false);
+  }
+
+  async function retryFailed() {
+    if (!failed) return;
+    setBusy(true);
+    const { error } = await supabase.storage.from('grabaciones').upload(failed.path, failed.blob, { contentType: failed.blob.type, upsert: true });
+    if (!error) {
+      await fetch('/api/recordings/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: failed.id, audio_path: failed.path, duracion_seg: failed.dur, mimetype: failed.blob.type }),
+      }).catch(() => {});
+      setFailed(null);
+    } else {
+      alert('Sigue sin subir (revisa tu conexión). Descarga el audio para no perderlo.');
     }
     setBusy(false);
   }
@@ -175,7 +207,61 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={{ recording, elapsed, label, busy, canRecord, start, stop }}>
       {children}
       {recording && <RecordingBar label={label} elapsed={elapsed} busy={busy} onStop={stop} />}
+      {failed && !recording && (
+        <FailedBar busy={busy} onRetry={retryFailed} onDownload={() => saveBlob(failed.blob, failed.filename)} onDismiss={() => setFailed(null)} />
+      )}
     </Ctx.Provider>
+  );
+}
+
+// Guarda el blob en el teléfono: share sheet (iOS/Archivos) o descarga directa.
+async function saveBlob(blob: Blob, filename: string) {
+  const file = new File([blob], filename, { type: blob.type || 'audio/webm' });
+  try {
+    const nav = navigator as Navigator & {
+      canShare?: (d: { files: File[] }) => boolean;
+      share?: (d: { files: File[]; title?: string }) => Promise<void>;
+    };
+    if (nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+      await nav.share({ files: [file], title: filename });
+      return;
+    }
+  } catch {
+    /* cae al fallback */
+  }
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+  } catch {
+    /* noop */
+  }
+}
+
+function FailedBar({ busy, onRetry, onDownload, onDismiss }: { busy: boolean; onRetry: () => void; onDownload: () => void; onDismiss: () => void }) {
+  return (
+    <div className="fixed inset-x-0 bottom-16 z-50 px-3 safe-bottom">
+      <div className="mx-auto max-w-lg rounded-xl border border-urgent/50 bg-ink-900/95 p-3 shadow-pop backdrop-blur">
+        <p className="text-sm font-semibold text-urgent">⚠️ El audio no se subió</p>
+        <p className="mt-0.5 text-[11px] text-slate-400">No lo pierdas: reintenta la subida o descárgalo a tu teléfono (luego súbelo con 📁 en Juntas).</p>
+        <div className="mt-2 flex gap-2">
+          <button onClick={onRetry} disabled={busy} className="btn-primary flex-1 py-2 text-sm">
+            {busy ? 'Subiendo…' : '↻ Reintentar'}
+          </button>
+          <button onClick={onDownload} className="rounded-xl border border-ink-700 bg-ink-800/60 px-4 py-2 text-sm font-medium text-slate-200 active:scale-95">
+            ⬇︎ Descargar
+          </button>
+          <button onClick={onDismiss} aria-label="Descartar" className="rounded-xl border border-ink-700 px-3 py-2 text-sm text-slate-500 active:scale-95">
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
