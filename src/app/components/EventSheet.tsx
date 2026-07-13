@@ -27,6 +27,9 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [showMover, setShowMover] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  // Los ids de ocurrencias recurrentes de Google terminan en _YYYYMMDDThhmmss.
+  const isRecurring = /_\d{8}T\d{6}/.test(event.id);
 
   useEffect(() => {
     supabase
@@ -191,14 +194,44 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
             </button>
             <button
               onClick={() => {
-                if (confirm('¿Cancelar este evento? Se avisará a los invitados.')) call({ action: 'cancel' }, '✅ Evento cancelado');
+                if (isRecurring) {
+                  setShowMover(false);
+                  setShowCancel((v) => !v);
+                } else if (confirm('¿Cancelar este evento? Se avisará a los invitados.')) {
+                  call({ action: 'cancel', scope: 'this' }, '✅ Evento cancelado');
+                }
               }}
               disabled={busy}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-urgent/40 bg-urgent/10 py-2.5 text-sm font-semibold text-urgent active:scale-95"
+              className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold text-urgent active:scale-95 ${
+                showCancel ? 'border-urgent bg-urgent/20' : 'border-urgent/40 bg-urgent/10'
+              }`}
             >
               🗑️ Cancelar
             </button>
           </div>
+
+          {showCancel && isRecurring && (
+            <div className="space-y-2 rounded-xl border border-urgent/30 bg-ink-900/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Junta recurrente — ¿qué cancelas?</p>
+              <p className="text-xs text-slate-400">Se avisa a los invitados por correo.</p>
+              <button
+                onClick={() => call({ action: 'cancel', scope: 'this' }, '✅ Cancelada solo esta ocurrencia')}
+                disabled={busy}
+                className="w-full rounded-xl border border-ink-700 bg-ink-800/60 py-2 text-sm font-medium text-slate-200 active:scale-[0.98]"
+              >
+                Solo esta ocurrencia
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm('¿Cancelar TODA la serie? Se elimina en todos sus días.')) call({ action: 'cancel', scope: 'series' }, '✅ Serie cancelada');
+                }}
+                disabled={busy}
+                className="w-full rounded-xl border border-urgent/40 bg-urgent/10 py-2 text-sm font-medium text-urgent active:scale-[0.98]"
+              >
+                Toda la serie
+              </button>
+            </div>
+          )}
 
           {showMover && (
             <div className="space-y-2 rounded-xl border border-accent/30 bg-ink-900/50 p-3">

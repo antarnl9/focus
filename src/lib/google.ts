@@ -278,11 +278,21 @@ export async function updateBlockEvent(
 }
 
 // Cancela (elimina) un evento y avisa a los invitados.
-export async function cancelEvent(userId: string, eventId: string): Promise<{ ok: boolean; error?: string }> {
+// scope 'this' = solo esa ocurrencia; 'series' = toda la serie recurrente.
+export async function cancelEvent(
+  userId: string,
+  eventId: string,
+  scope: 'this' | 'series' = 'this'
+): Promise<{ ok: boolean; error?: string }> {
   const cal = await getCalendarClient(userId);
   if (!cal) return { ok: false, error: 'Calendar no conectado' };
   try {
-    await cal.events.delete({ calendarId: env.googleCalendarId, eventId, sendUpdates: 'all' });
+    let targetId = eventId;
+    if (scope === 'series') {
+      const inst = await cal.events.get({ calendarId: env.googleCalendarId, eventId });
+      targetId = inst.data.recurringEventId || eventId; // maestro de la serie
+    }
+    await cal.events.delete({ calendarId: env.googleCalendarId, eventId: targetId, sendUpdates: 'all' });
     return { ok: true };
   } catch (err) {
     console.error('[google] cancelEvent', err);

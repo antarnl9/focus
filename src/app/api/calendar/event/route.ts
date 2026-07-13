@@ -15,6 +15,7 @@ export async function POST(request: Request) {
     emails?: string[];
     hora_ini?: string;
     hora_fin?: string;
+    scope?: 'this' | 'series';
   };
 
   if (!body.eventId) return NextResponse.json({ error: 'missing_event' }, { status: 400 });
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
       res = await rescheduleEvent(user.id, body.eventId, body.hora_ini, body.hora_fin);
       break;
     case 'cancel':
-      res = await cancelEvent(user.id, body.eventId);
+      res = await cancelEvent(user.id, body.eventId, body.scope === 'series' ? 'series' : 'this');
       break;
     default:
       return NextResponse.json({ error: 'bad_action' }, { status: 400 });
