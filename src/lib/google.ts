@@ -192,6 +192,38 @@ export async function createEvent(
   }
 }
 
+// Crea el evento RECURRENTE de un bloque (respeta sus días) e invita. Va
+// etiquetado focus=1 para que NO se duplique con el bloque en el espejo/home.
+export async function createBlockEvent(
+  userId: string,
+  block: { label: string; hora_ini: string; hora_fin: string; tipo: string; dias?: number[] | null },
+  emails: string[]
+): Promise<{ ok: boolean; eventId?: string; error?: string }> {
+  const cal = await getCalendarClient(userId);
+  if (!cal) return { ok: false, error: 'Calendar no conectado' };
+  const today = localDateStr();
+  const busy = block.tipo === 'protegido' || block.tipo === 'comida';
+  try {
+    const res = await cal.events.insert({
+      calendarId: env.googleCalendarId,
+      sendUpdates: 'all',
+      requestBody: {
+        summary: block.label,
+        start: { dateTime: `${today}T${block.hora_ini}:00`, timeZone: TZ },
+        end: { dateTime: `${today}T${block.hora_fin}:00`, timeZone: TZ },
+        recurrence: [rruleFor(block.dias)],
+        attendees: emails.map((e) => ({ email: e })),
+        transparency: busy ? 'opaque' : 'transparent',
+        extendedProperties: { private: { focus: '1' } },
+      },
+    });
+    return { ok: true, eventId: res.data.id ?? undefined };
+  } catch (err) {
+    console.error('[google] createBlockEvent', err);
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
 // --- Operaciones sobre un evento (para editar desde la app) ---
 
 // Agrega invitados a un evento y les manda el invite por correo.

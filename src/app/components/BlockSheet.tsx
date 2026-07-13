@@ -4,7 +4,6 @@ import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DayBlock, BlockTipo } from '@/lib/types';
 import { WEEKDAYS, BLOCK_META } from '@/lib/defaults';
-import { localDateStr } from '@/lib/time';
 import { PeoplePicker } from './PeoplePicker';
 
 const TIPOS: BlockTipo[] = ['fija', 'protegido', 'dudas', 'flex', 'comida', 'neutral'];
@@ -37,13 +36,21 @@ export function BlockSheet({
     if (emails.length === 0) return;
     setInviting(true);
     setInviteMsg(null);
-    const res = await fetch('/api/calendar/create', {
+    const res = await fetch('/api/calendar/block-invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary: label.trim() || block.label, fecha: localDateStr(), hora_ini: horaIni, hora_fin: horaFin, emails }),
+      body: JSON.stringify({
+        block_id: block.id,
+        label: label.trim() || block.label,
+        hora_ini: horaIni,
+        hora_fin: horaFin,
+        tipo,
+        dias: dias.length ? dias : null,
+        emails,
+      }),
     });
     setInviting(false);
-    if (res.ok) setInviteMsg('✅ Junta creada en Calendar e invitaciones enviadas.');
+    if (res.ok) setInviteMsg('✅ Invitaciones enviadas para todos los días de este bloque.');
     else {
       const j = await res.json().catch(() => ({}));
       setInviteMsg('Error: ' + (j.error || 'no se pudo. ¿Conectaste Calendar?'));
