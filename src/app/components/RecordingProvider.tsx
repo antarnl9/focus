@@ -180,7 +180,9 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       }).catch(() => {});
       setFailed(null);
     } else {
-      // No se pudo subir: conserva el audio para reintentar o descargar (no se pierde).
+      // No se pudo subir: marca "error" (para no dejarla en "Grabando…") y
+      // conserva el audio para reintentar o descargar (no se pierde).
+      await supabase.from('grabaciones').update({ estado: 'error' }).eq('id', id);
       setFailed({ blob, filename: `junta-${id}.${ext}`, id, path, dur });
     }
     setBusy(false);
