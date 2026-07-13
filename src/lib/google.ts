@@ -195,18 +195,26 @@ export async function createEvent(
 // --- Operaciones sobre un evento (para editar desde la app) ---
 
 // Agrega invitados a un evento y les manda el invite por correo.
+// Si el evento es una ocurrencia de una serie recurrente, invita a TODA la
+// serie (todos sus días), no solo a ese día.
 export async function inviteToEvent(userId: string, eventId: string, emails: string[]): Promise<{ ok: boolean; error?: string }> {
   const cal = await getCalendarClient(userId);
   if (!cal) return { ok: false, error: 'Calendar no conectado' };
   try {
-    const ev = await cal.events.get({ calendarId: env.googleCalendarId, eventId });
-    const existing = ev.data.attendees ?? [];
+    const inst = await cal.events.get({ calendarId: env.googleCalendarId, eventId });
+    // recurringEventId apunta al evento maestro de la serie; si existe, invita ahí.
+    const targetId = inst.data.recurringEventId || eventId;
+    const target =
+      targetId === eventId ? inst : await cal.events.get({ calendarId: env.googleCalendarId, eventId: targetId });
+
+    const existing = target.data.attendees ?? [];
     const set = new Map<string, { email: string }>();
     for (const a of existing) if (a.email) set.set(a.email.toLowerCase(), { email: a.email });
     for (const e of emails) if (e) set.set(e.toLowerCase(), { email: e });
+
     await cal.events.patch({
       calendarId: env.googleCalendarId,
-      eventId,
+      eventId: targetId,
       sendUpdates: 'all', // manda el invite
       requestBody: { attendees: [...set.values()] },
     });
