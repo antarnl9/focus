@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { BitacoraEntry } from '@/lib/types';
+import { useDictation } from './useDictation';
 
 const TIPO_META: Record<BitacoraEntry['tipo'], { icon: string; label: string }> = {
   nota: { icon: '📝', label: 'Nota' },
@@ -26,8 +27,10 @@ export function Bitacora({
 }) {
   const [texto, setTexto] = useState('');
   const [saving, setSaving] = useState(false);
+  const { listening, toggle, stop } = useDictation(setTexto, () => texto);
 
   async function add() {
+    stop();
     const t = texto.trim();
     if (!t) return;
     setSaving(true);
@@ -45,18 +48,34 @@ export function Bitacora({
         <span className="chip bg-ink-700 text-slate-400">{entries.length}</span>
       </div>
 
-      {/* Entrada rápida de una línea (spec §3.5). */}
-      <div className="card mb-4 flex items-center gap-2 p-2">
-        <input
+      {/* Entrada rápida: escribe o dicta por voz (notas y resúmenes). */}
+      <div className="card mb-4 space-y-2 p-3">
+        <textarea
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-          placeholder="Anota algo del día…"
-          className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none"
+          placeholder={listening ? 'Escuchando… habla' : 'Anota o dicta algo del día (nota, resumen de una junta…)'}
+          rows={2}
+          className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-slate-600"
         />
-        <button onClick={add} disabled={saving || !texto.trim()} className="btn-primary px-4 py-2 text-sm">
-          Añadir
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggle}
+            aria-label={listening ? 'Detener dictado' : 'Dictar por voz'}
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-base active:scale-90 ${
+              listening ? 'animate-pulse bg-urgent text-white' : 'bg-ink-800 text-slate-300'
+            }`}
+          >
+            {listening ? '⏹' : '🎤'}
+          </button>
+          {listening ? (
+            <span className="flex-1 text-[11px] font-medium text-urgent">● Escuchando… toca ⏹ y revisa</span>
+          ) : (
+            <span className="flex-1 text-[11px] text-slate-600">Toca 🎤 para dictar</span>
+          )}
+          <button onClick={add} disabled={saving || !texto.trim()} className="btn-primary px-4 py-2 text-sm">
+            Añadir
+          </button>
+        </div>
       </div>
 
       <ol className="relative space-y-3 border-l border-ink-700 pl-4">

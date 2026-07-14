@@ -472,6 +472,12 @@ function GrabacionCard({
             <p className="text-xs text-slate-500">Cargando audio…</p>
           ) : null}
 
+          {!g.audio_path && (g.estado === 'error' || g.estado === 'grabando') && (
+            <p className="mt-2 rounded-lg bg-urgent/10 px-3 py-2 text-[12px] text-urgent">
+              ⚠️ No se guardó el audio (falló la subida). Puedes eliminarla, o dictar un resumen en la Bitácora. El botón para reintentar sale solo en el momento en que falla.
+            </p>
+          )}
+
           {!editing ? (
             <div className="mt-2 flex items-center gap-2">
               <button onClick={() => setEditing(true)} className="chip bg-ink-700 text-slate-300">
