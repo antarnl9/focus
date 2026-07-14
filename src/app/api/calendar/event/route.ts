@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
-import { inviteToEvent, rescheduleEvent, cancelEvent } from '@/lib/google';
+import { inviteToEvent, rescheduleEvent, cancelEvent, setEventRecurrence } from '@/lib/google';
 import { syncCalendar } from '@/lib/calendar';
 
 // Editar un evento de Calendar desde la app: invitar, mover o cancelar.
@@ -10,12 +10,13 @@ export async function POST(request: Request) {
   const { user } = auth;
 
   const body = (await request.json()) as {
-    action: 'invite' | 'reschedule' | 'cancel';
+    action: 'invite' | 'reschedule' | 'cancel' | 'recurrence';
     eventId: string;
     emails?: string[];
     hora_ini?: string;
     hora_fin?: string;
     scope?: 'this' | 'series';
+    dias?: number[];
   };
 
   if (!body.eventId) return NextResponse.json({ error: 'missing_event' }, { status: 400 });
@@ -31,6 +32,9 @@ export async function POST(request: Request) {
       break;
     case 'cancel':
       res = await cancelEvent(user.id, body.eventId, body.scope === 'series' ? 'series' : 'this');
+      break;
+    case 'recurrence':
+      res = await setEventRecurrence(user.id, body.eventId, body.dias ?? []);
       break;
     default:
       return NextResponse.json({ error: 'bad_action' }, { status: 400 });

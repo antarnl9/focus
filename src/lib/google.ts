@@ -309,6 +309,31 @@ export async function updateBlockEvent(
   }
 }
 
+// Fija los días de recurrencia de un evento (lo vuelve recurrente si era de un
+// solo día). Aplica a toda la serie y avisa a los invitados.
+export async function setEventRecurrence(
+  userId: string,
+  eventId: string,
+  dias: number[]
+): Promise<{ ok: boolean; error?: string }> {
+  const cal = await getCalendarClient(userId);
+  if (!cal) return { ok: false, error: 'Calendar no conectado' };
+  try {
+    const inst = await cal.events.get({ calendarId: env.googleCalendarId, eventId });
+    const targetId = inst.data.recurringEventId || eventId; // maestro de la serie
+    await cal.events.patch({
+      calendarId: env.googleCalendarId,
+      eventId: targetId,
+      sendUpdates: 'all',
+      requestBody: { recurrence: [rruleFor(dias)] },
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('[google] setEventRecurrence', err);
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
 // Cancela (elimina) un evento y avisa a los invitados.
 // scope 'this' = solo esa ocurrencia; 'series' = toda la serie recurrente.
 export async function cancelEvent(

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createSupabaseBrowser } from '@/lib/supabase/client';
 import type { CalendarEvent, PersonaTipo } from '@/lib/types';
 import { localTimeStr } from '@/lib/time';
+import { WEEKDAYS } from '@/lib/defaults';
 
 interface P {
   id: string;
@@ -28,6 +29,8 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
   const [msg, setMsg] = useState<string | null>(null);
   const [showMover, setShowMover] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
+  const [showRecur, setShowRecur] = useState(false);
+  const [recurDias, setRecurDias] = useState<number[]>([]);
   // Los ids de ocurrencias recurrentes de Google terminan en _YYYYMMDDThhmmss.
   const isRecurring = /_\d{8}T\d{6}/.test(event.id);
 
@@ -65,7 +68,7 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
     setEmailInput('');
   }
 
-  async function call(body: object, okMsg: string) {
+  async function call(body: object, okMsg: string, keepOpen = false) {
     setBusy(true);
     setMsg(null);
     const res = await fetch('/api/calendar/event', {
@@ -77,7 +80,7 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
     if (res.ok) {
       setMsg(okMsg);
       router.refresh();
-      setTimeout(onClose, 800);
+      if (!keepOpen) setTimeout(onClose, 800);
     } else {
       const j = await res.json().catch(() => ({}));
       setMsg('Error: ' + (j.error || 'no se pudo. ¿Eres el organizador del evento?'));
@@ -183,32 +186,73 @@ export function EventSheet({ event, onClose }: { event: CalendarEvent; onClose: 
             </button>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
-              onClick={() => setShowMover((v) => !v)}
-              className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold active:scale-95 ${
+              onClick={() => {
+                setShowCancel(false);
+                setShowRecur(false);
+                setShowMover((v) => !v);
+              }}
+              className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border py-2 text-[12px] font-semibold active:scale-95 ${
                 showMover ? 'border-accent/50 bg-accent/15 text-accent' : 'border-ink-700 bg-ink-800/60 text-slate-200'
               }`}
             >
-              🕐 Mover horario
+              <span className="text-base">🕐</span> Mover
             </button>
             <button
               onClick={() => {
-                if (isRecurring) {
-                  setShowMover(false);
-                  setShowCancel((v) => !v);
-                } else if (confirm('¿Cancelar este evento? Se avisará a los invitados.')) {
-                  call({ action: 'cancel', scope: 'this' }, '✅ Evento cancelado');
-                }
+                setShowMover(false);
+                setShowCancel(false);
+                setShowRecur((v) => !v);
+              }}
+              className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border py-2 text-[12px] font-semibold active:scale-95 ${
+                showRecur ? 'border-brand/50 bg-brand/15 text-brand-soft' : 'border-ink-700 bg-ink-800/60 text-slate-200'
+              }`}
+            >
+              <span className="text-base">🔁</span> Repetir
+            </button>
+            <button
+              onClick={() => {
+                setShowMover(false);
+                setShowRecur(false);
+                if (isRecurring) setShowCancel((v) => !v);
+                else if (confirm('¿Cancelar este evento? Se avisará a los invitados.')) call({ action: 'cancel', scope: 'this' }, '✅ Evento cancelado');
               }}
               disabled={busy}
-              className={`flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-semibold text-urgent active:scale-95 ${
+              className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border py-2 text-[12px] font-semibold text-urgent active:scale-95 ${
                 showCancel ? 'border-urgent bg-urgent/20' : 'border-urgent/40 bg-urgent/10'
               }`}
             >
-              🗑️ Cancelar
+              <span className="text-base">🗑️</span> Cancelar
             </button>
           </div>
+
+          {showRecur && (
+            <div className="space-y-2 rounded-xl border border-brand/30 bg-ink-900/50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Repetir en estos días</p>
+              <p className="text-xs text-slate-400">Vuelve la junta recurrente. A los invitados les llega en todos los días que marques.</p>
+              <div className="flex gap-1.5">
+                {WEEKDAYS.map((d) => (
+                  <button
+                    key={d.v}
+                    onClick={() => setRecurDias((prev) => (prev.includes(d.v) ? prev.filter((x) => x !== d.v) : [...prev, d.v]))}
+                    className={`grid h-9 w-9 place-items-center rounded-full text-sm font-semibold ${
+                      recurDias.includes(d.v) ? 'bg-brand text-white' : 'bg-ink-800 text-slate-500'
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => call({ action: 'recurrence', dias: recurDias }, '🔁 Listo. Ahora invita a la gente y les llegará en esos días.', true)}
+                disabled={busy || recurDias.length === 0}
+                className="btn-primary w-full py-2 text-sm"
+              >
+                Aplicar recurrencia
+              </button>
+            </div>
+          )}
 
           {showCancel && isRecurring && (
             <div className="space-y-2 rounded-xl border border-urgent/30 bg-ink-900/50 p-3">
