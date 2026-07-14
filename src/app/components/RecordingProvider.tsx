@@ -81,10 +81,20 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     wakeRef.current = null;
   }, []);
 
-  // Re-adquiere el Wake Lock al volver a la app (se libera al ocultar).
+  // Al ocultar la app: fuerza a volcar el último trozo de audio (por si el
+  // sistema la congela). Al volver: re-adquiere el Wake Lock.
   useEffect(() => {
     const onVis = () => {
-      if (recording && document.visibilityState === 'visible' && !wakeRef.current) acquireWake();
+      if (!recording) return;
+      if (document.visibilityState === 'hidden') {
+        try {
+          mediaRef.current?.requestData();
+        } catch {
+          /* recorder ya inactivo */
+        }
+      } else if (!wakeRef.current) {
+        acquireWake();
+      }
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
@@ -128,7 +138,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
 
         mediaRef.current = mr;
         startRef.current = Date.now();
-        mr.start();
+        mr.start(15000); // emite el audio en trozos de 15s: si se interrumpe, no se pierde todo
         await acquireWake();
         setRecording(true);
         setLabel(lbl);
