@@ -195,7 +195,7 @@ export function Dashboard(props: Props) {
           <Bitacora supabase={supabase} today={props.today} entries={bitacora} onChanged={refetchBitacora} />
         )}
 
-        {tab === 'juntas' && <Recorder initial={props.initialGrabaciones} blocks={todayBlocks} now={now} events={events} />}
+        {tab === 'juntas' && <Recorder initial={props.initialGrabaciones} blocks={todayBlocks} now={now} events={events} today={props.today} />}
 
         {tab === 'slack' && (
           <section>

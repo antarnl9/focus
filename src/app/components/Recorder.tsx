@@ -42,11 +42,13 @@ export function Recorder({
   blocks,
   now,
   events,
+  today,
 }: {
   initial: Grabacion[];
   blocks: DayBlock[];
   now: Date;
   events: CalendarEvent[];
+  today: string;
 }) {
   const supabase = useRef(createSupabaseBrowser()).current;
   const rec = useRecording();
@@ -57,6 +59,7 @@ export function Recorder({
   const [selPersonas, setSelPersonas] = useState<string[]>([]);
   const [switching, setSwitching] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [fecha, setFecha] = useState(today); // día de la junta (para subir grabaciones pasadas)
   const userSetRef = useRef(false);
   const wasRecording = useRef(false);
 
@@ -186,7 +189,7 @@ export function Recorder({
 
   function grabar() {
     const { label, blockRef, attendees } = currentSel();
-    rec.start({ label, blockRef, attendees, personaIds: selPersonas });
+    rec.start({ label, blockRef, attendees, personaIds: selPersonas, fecha: fecha !== today ? fecha : undefined });
   }
 
   async function uploadFile(file: File) {
@@ -202,6 +205,7 @@ export function Recorder({
           label: label !== 'Junta sin nombre' ? label : file.name.replace(/\.[^.]+$/, ''),
           block_ref: blockRef,
           estado: 'grabando',
+          fecha,
         })
         .select()
         .single();
@@ -320,6 +324,29 @@ export function Recorder({
           />
         </div>
 
+        {/* Día de la junta (para subir grabaciones de días pasados) */}
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-[11px] uppercase tracking-wide text-slate-500">Día de la junta</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={fecha}
+              max={today}
+              onChange={(e) => setFecha(e.target.value || today)}
+              disabled={rec.recording}
+              className="rounded-lg bg-ink-900 px-2 py-1.5 text-sm text-slate-200 outline-none ring-1 ring-ink-700 focus:ring-brand disabled:opacity-60"
+            />
+            {fecha !== today && (
+              <button onClick={() => setFecha(today)} className="text-[11px] text-brand-soft underline">
+                hoy
+              </button>
+            )}
+          </div>
+        </div>
+        {fecha !== today && (
+          <p className="text-[11px] text-slate-500">📅 Se guardará como junta de un día pasado. Ideal para subir una grabación que se te pasó.</p>
+        )}
+
         {/* Grabar / detener */}
         <div className="flex items-center gap-3">
           {!rec.recording ? (
@@ -331,11 +358,11 @@ export function Recorder({
               ⏹ Detener · {fmtDur(rec.elapsed)}
             </button>
           )}
-          <label className="btn-ghost cursor-pointer" title="Subir audio del teléfono">
-            {uploading ? '⏳' : '📁'}
+          <label className="btn-ghost cursor-pointer" title="Subir audio (o nota de voz del teléfono)">
+            {uploading ? '⏳' : '📁 Subir'}
             <input
               type="file"
-              accept="audio/*"
+              accept="audio/*,.m4a,.mp3,.wav,.aac,.caf,.mp4"
               className="hidden"
               disabled={rec.recording || uploading}
               onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
@@ -456,8 +483,9 @@ function GrabacionCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{g.label}</p>
           <p className="truncate text-xs text-slate-500">
-            {conQuien ? conQuien + ' · ' : ''}
-            {g.duracion_seg ? fmtDur(g.duracion_seg) : ''}
+            {g.fecha}
+            {conQuien ? ` · ${conQuien}` : ''}
+            {g.duracion_seg ? ` · ${fmtDur(g.duracion_seg)}` : ''}
           </p>
         </div>
         <span className={`chip ${m.tone}`}>{m.label}</span>

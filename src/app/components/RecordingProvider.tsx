@@ -10,6 +10,7 @@ interface StartArgs {
   blockRef?: string | null;
   personaIds?: string[];
   attendees?: EventAttendee[]; // invitados del evento; se crean/casan como personas
+  fecha?: string; // día de la junta (YYYY-MM-DD); default hoy
 }
 
 interface RecordingCtx {
@@ -106,7 +107,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   }
 
   const start = useCallback(
-    async ({ label: lbl, blockRef = null, personaIds = [], attendees = [] }: StartArgs) => {
+    async ({ label: lbl, blockRef = null, personaIds = [], attendees = [], fecha }: StartArgs) => {
       if (recording || busy) return;
       setBusy(true);
       try {
@@ -125,7 +126,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
 
         const { data } = await supabase
           .from('grabaciones')
-          .insert({ user_id: uid, label: lbl, block_ref: blockRef, estado: 'grabando' })
+          .insert({ user_id: uid, label: lbl, block_ref: blockRef, estado: 'grabando', ...(fecha ? { fecha } : {}) })
           .select()
           .single();
         const id = (data as Grabacion)?.id ?? null;
